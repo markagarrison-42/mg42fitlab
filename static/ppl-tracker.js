@@ -1542,7 +1542,14 @@ function PPLTracker(){
   const[schedule,setScheduleRaw]=useState(()=>{const s=loadLS('fitlog_schedule',null);return Array.isArray(s)&&s.length>0?s:DEFAULT_SCHEDULE;});
   const[restDefaults,setRestDefaultsRaw]=useState(loadRestDefaults);
   const[allLogs,setAllLogs]=useState({});
-  const[wKey,setWKey]=useState('push_a');
+  const[wKey,setWKey]=useState(()=>{
+    const s=loadLS('fitlog_schedule',null);
+    const sched=Array.isArray(s)&&s.length>0?s:DEFAULT_SCHEDULE;
+    const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const today=days[new Date().getDay()];
+    const todayItem=sched.find(x=>x.day===today);
+    return(todayItem&&todayItem.workoutKey)||'pm_push';
+  });
   const[tab,setTab]=useState('workout');
   const[activeWorkout,setActiveWorkout]=useState(false);
   const[activeTimer,setActiveTimer]=useState(null);
@@ -1830,46 +1837,55 @@ function PPLTracker(){
 
     tab==='workout'&&React.createElement(React.Fragment,null,
       React.createElement('div',{style:{position:'sticky',top:0,zIndex:10,backdropFilter:'blur(16px)',borderBottom:'1px solid '+T.border,padding:'0 16px',background:'linear-gradient(180deg,'+T.bg+'f8 0%,'+T.bg+'e0 100%)'}},
-        React.createElement('div',{style:{textAlign:'center',paddingTop:18,paddingBottom:12,position:'relative'}},
-          React.createElement('div',{style:{fontSize:11,fontFamily:T.mono,color:T.muted,letterSpacing:'0.18em',textTransform:'uppercase',marginBottom:4}},'Push / Pull / Legs'),
-          React.createElement('div',{style:{fontSize:28,fontWeight:800,background:GRAD.accent,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',letterSpacing:'-0.03em',lineHeight:1.3,paddingBottom:2}},'FitLog'),
-          React.createElement('a',{href:'/logout',style:{position:'absolute',right:0,top:'50%',transform:'translateY(-50%)',width:44,height:44,borderRadius:10,border:'1px solid '+T.border2,background:'rgba(255,255,255,0.03)',color:T.muted,textDecoration:'none',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,WebkitTapHighlightColor:'transparent'}},'⎋')
+        React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',paddingTop:16,paddingBottom:12}},
+          React.createElement('div',{style:{fontSize:22,fontWeight:800,background:GRAD.accent,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',letterSpacing:'-0.03em'}},'FitLog'),
+          React.createElement('a',{href:'/logout',style:{width:38,height:38,borderRadius:10,border:'1px solid '+T.border2,background:'rgba(255,255,255,0.03)',color:T.muted,textDecoration:'none',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,WebkitTapHighlightColor:'transparent'}},'\u238b')
         ),
-        (()=>{
-          const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];const today=days[new Date().getDay()];
-          const todayItem=schedule.find(s=>s.day===today);const todayWorkout=todayItem&&todayItem.workoutKey?workouts[todayItem.workoutKey]:null;
-          if(!todayWorkout||todayItem.workoutKey===wKey)return null;
-          const a=CAT[todayWorkout.category]||'#06b6d4';
-          return React.createElement('div',{style:{margin:'0 0 8px',padding:'10px 14px',background:'linear-gradient(135deg,'+a+'18,'+a+'06)',borderRadius:10,border:'1px solid '+a+'35',display:'flex',alignItems:'center',gap:12}},
-            React.createElement('div',{style:{flex:1}},React.createElement('div',{style:{fontSize:10,color:a,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:2}},'Today · '+today),React.createElement('div',{style:{fontSize:14,fontWeight:700,color:T.text}},todayWorkout.label)),
-            React.createElement('button',{onClick:()=>setWKey(todayItem.workoutKey),style:{padding:'7px 12px',borderRadius:8,border:'none',background:a,color:'#0a0c0f',fontSize:12,fontWeight:700,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'Switch')
-          );
-        })(),
         React.createElement('div',{style:{display:'flex',gap:6,overflowX:'auto',paddingBottom:14,scrollbarWidth:'none'}},
-          [
-            {key:'pm_push',label:'PM Push'},{key:'pm_pull',label:'PM Pull'},{key:'pm_legs',label:'PM Legs'},
-            {key:'rrb_push',label:'RRB Push'},{key:'rrb_pull',label:'RRB Pull'},{key:'rrb_legs',label:'RRB Legs'},
-            {key:'pf_sat',label:'PF Sat'},
-          ].filter(({key})=>workouts[key]).map(({key,label})=>{
-            const w=workouts[key];const a=CAT[w.category];const active=wKey===key;
-            return React.createElement('button',{key,onClick:()=>setWKey(key),style:{flexShrink:0,padding:'10px 16px',borderRadius:10,border:'1px solid '+(active?a+'60':T.border2),background:active?'linear-gradient(135deg,'+a+'30,'+a+'10)':'rgba(255,255,255,0.03)',color:active?a:T.sub,fontSize:13,fontWeight:active?700:500,cursor:'pointer',fontFamily:T.sans,minHeight:44,WebkitTapHighlightColor:'transparent'}},label);
-          })
+          // Tab strip mirrors the current weekly schedule — unique workout keys, in day order (Sun-Sat), deduped
+          (()=>{
+            const dayOrder=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+            const seen=new Set();const scheduleKeys=[];
+            dayOrder.forEach(d=>{
+              const item=schedule.find(s=>s.day===d);
+              if(item&&item.workoutKey&&workouts[item.workoutKey]&&!seen.has(item.workoutKey)){seen.add(item.workoutKey);scheduleKeys.push(item.workoutKey);}
+            });
+            return scheduleKeys.map(key=>{
+              const w=workouts[key];const a=CAT[w.category];const active=wKey===key;
+              return React.createElement('button',{key,onClick:()=>setWKey(key),style:{flexShrink:0,padding:'9px 15px',borderRadius:9,border:'1px solid '+(active?a+'60':T.border2),background:active?'linear-gradient(135deg,'+a+'30,'+a+'10)':'rgba(255,255,255,0.03)',color:active?a:T.sub,fontSize:12,fontWeight:active?700:500,cursor:'pointer',fontFamily:T.sans,minHeight:40,WebkitTapHighlightColor:'transparent'}},w.label);
+            });
+          })()
         )
       ),
+      (()=>{
+        const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];const today=days[new Date().getDay()];
+        const todayItem=schedule.find(s=>s.day===today);const todayWorkout=todayItem&&todayItem.workoutKey?workouts[todayItem.workoutKey]:null;
+        const isTodaySelected=todayWorkout&&todayItem.workoutKey===wKey;
+        if(!todayWorkout||isTodaySelected)return null;
+        const a=CAT[todayWorkout.category]||'#06b6d4';
+        return React.createElement('div',{style:{margin:'14px 16px 0',padding:'16px 18px',background:'linear-gradient(135deg,'+a+'22,'+a+'08)',borderRadius:16,border:'1px solid '+a+'40'}},
+          React.createElement('div',{style:{fontSize:10,color:a,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:4}},'Today \u00b7 '+today),
+          React.createElement('div',{style:{display:'flex',alignItems:'center',gap:12}},
+            React.createElement('div',{style:{flex:1,fontSize:19,fontWeight:800,color:T.text,letterSpacing:'-0.01em'}},todayWorkout.label),
+            React.createElement('button',{onClick:()=>{setWKey(todayItem.workoutKey);startWorkout();},style:{padding:'11px 18px',borderRadius:11,border:'none',background:a,color:'#0a0c0f',fontSize:14,fontWeight:800,cursor:'pointer',WebkitTapHighlightColor:'transparent',flexShrink:0,boxShadow:'0 4px 16px '+a+'50'}},'\u25b6 Start')
+          )
+        );
+      })(),
       React.createElement('div',{style:{padding:'16px 16px 0'}},
         React.createElement('div',{style:{padding:'16px 18px',background:'linear-gradient(135deg,'+accent+'18,'+accent+'06)',borderRadius:16,border:'1px solid '+accent+'35',marginBottom:4}},
           React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}},
             React.createElement('div',null,React.createElement('div',{style:{fontSize:22,fontWeight:700,color:T.text,letterSpacing:'-0.02em'}},workout.label),React.createElement('div',{style:{fontSize:13,color:T.muted,marginTop:4}},workout.note)),
             React.createElement('div',{style:{fontSize:11,color:accent,fontWeight:700,padding:'4px 10px',borderRadius:8,background:accent+'18',border:'1px solid '+accent+'30'}},workout.tag)
           ),
-          React.createElement('button',{onClick:startWorkout,style:{width:'100%',padding:16,borderRadius:12,border:'none',background:GRAD.button,color:'#fff',fontWeight:700,fontSize:17,cursor:'pointer',minHeight:56,WebkitTapHighlightColor:'transparent',boxShadow:'0 8px 28px '+accent+'55',letterSpacing:'-0.01em'}},'▶  Start Workout'),
-          ['pm_push','pm_pull','pm_legs'].includes(wKey)&&React.createElement('a',{href:'https://mg42powermatrix.netlify.app',target:'_blank',rel:'noopener noreferrer',style:{display:'block',marginTop:10,padding:'11px 16px',borderRadius:10,border:'1px solid #e8a02060',background:'rgba(232,160,32,0.08)',color:'#e8a020',fontWeight:600,fontSize:13,textAlign:'center',textDecoration:'none',WebkitTapHighlightColor:'transparent'}},'📈 Open Power Matrix ↗')
+          React.createElement('button',{onClick:startWorkout,style:{width:'100%',padding:16,borderRadius:12,border:'none',background:GRAD.button,color:'#fff',fontWeight:700,fontSize:17,cursor:'pointer',minHeight:56,WebkitTapHighlightColor:'transparent',boxShadow:'0 8px 28px '+accent+'55',letterSpacing:'-0.01em'}},'\u25b6  Start Workout'),
+          ['pm_push','pm_pull','pm_legs'].includes(wKey)&&React.createElement('a',{href:'https://mg42powermatrix.netlify.app',target:'_blank',rel:'noopener noreferrer',style:{display:'block',marginTop:10,padding:'11px 16px',borderRadius:10,border:'1px solid #e8a02060',background:'rgba(232,160,32,0.08)',color:'#e8a020',fontWeight:600,fontSize:13,textAlign:'center',textDecoration:'none',WebkitTapHighlightColor:'transparent'}},'\U0001F4C8 Open Power Matrix \u2197')
         )
       ),
       React.createElement('div',{style:{padding:'4px 0 16px'}},
         workout.exercises.map(ex=>React.createElement(ExerciseBlock,{key:wKey+'-'+ex.id,ex,accent,allLogs,setAllLogs,restDefaults,onSetLogged:handleSetLogged,onPR:handlePR}))
       )
     ),
+
 
     tab==='routines'&&React.createElement(RoutinesTab,{workouts,onReorder:handleReorder,onArchive:handleArchive,allLogs,
       onStartWorkout:(key)=>{setWKey(key);setTab('workout');},
