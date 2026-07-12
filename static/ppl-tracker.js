@@ -1,18 +1,192 @@
 const { useState, useEffect, useRef } = React;
 
+// ── SUPABASE CLIENT ────────────────────────────────────────────────────────────
+const SUPABASE_URL='https://rwtgleklptqixhigbrzy.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3dGdsZWtscHRxaXhoaWdicnp5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMzMTgwMzYsImV4cCI6MjA5ODg5NDAzNn0.NseddFUTsvltyw4_UhBLPbVrpD51ZL9YcpMIQQd1WSw';
+const supabase=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+
 function loadLS(k,fb){try{const s=localStorage.getItem(k);return s?JSON.parse(s):fb;}catch{return fb;}}
 function saveLS(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
 function loadRestDefaults(){return loadLS('fitlog_rest_defaults',{bench_press:180,incline_press_b:180,lat_pulldown_a:180,pullup_b:180,seated_row_a:180,squat_a:180,rdl_a:180,rdl_b:180,incline_db_press:90,arnold_press:90,db_chest_fly_a:90,lateral_raise_pa:90,lateral_raise_pb:90,lateral_raise_pf:90,tate_press_a:90,tate_press_b:90,cable_pushdown_a:90,flat_db_press_b:90,cable_crossover_b:90,db_shoulder_press_b:90,overhead_tri_b:90,db_row_a:90,face_pull_a:90,face_pull_b:90,face_pull_pf:90,shrug_a:90,incline_curl_a:90,hammer_curl_a:90,hammer_curl_b:90,hammer_curl_pf:90,chest_row_b:90,straight_arm_b:90,rear_delt_b:90,rear_delt_pf:90,cable_curl_b:90,bicep_curl_pf:90,bss_a:90,leg_ext_a:90,leg_ext_b:90,lying_curl_a:90,standing_calf_a:90,leg_press_b:90,seated_curl_b:90,lunge_b:90,seated_calf_b:90,lat_pulldown_pf:90,seated_row_pf:90,weighted_dips:90,cable_fly_b:90,deadlift:180,_default:120});}
 function getRestDuration(id,def){return(def&&def[id])||(def&&def._default)||120;}
-async function fetchAllLogs(){try{const r=await fetch('/api/logs');return r.ok?await r.json():{};}catch{return{};}}
-async function pushExerciseLogs(id,entries){try{await fetch('/api/logs/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(entries)});}catch{}}
-async function fetchServerWorkouts(){try{const r=await fetch('/api/workouts');return r.ok?await r.json():null;}catch{return null;}}
-async function saveServerWorkouts(data){try{await fetch('/api/workouts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});}catch{}}
+
+// ── DATA LAYER — talks directly to Supabase, RLS scopes everything to the signed-in user ──
+async function fetchAllLogs(){
+  try{
+    const{data,error}=await supabase.from('fitlog_logs').select('exercise_id,data');
+    if(error||!data)return{};
+    const result={};
+    data.forEach(row=>{try{result[row.exercise_id]=row.data;}catch{}});
+    return result;
+  }catch{return{};}
+}
+async function pushExerciseLogs(exerciseId,entries){
+  try{
+    const{data:{user}}=await supabase.auth.getUser();
+    if(!user)return;
+    await supabase.from('fitlog_logs').upsert({user_id:user.id,exercise_id:exerciseId,data:entries,updated_at:new Date().toISOString()},{onConflict:'user_id,exercise_id'});
+  }catch{}
+}
+async function fetchServerWorkouts(){
+  try{
+    const{data,error}=await supabase.from('fitlog_workouts').select('data').maybeSingle();
+    if(error||!data)return null;
+    return data.data;
+  }catch{return null;}
+}
+async function saveServerWorkouts(workoutsData){
+  try{
+    const{data:{user}}=await supabase.auth.getUser();
+    if(!user)return;
+    await supabase.from('fitlog_workouts').upsert({user_id:user.id,data:workoutsData,updated_at:new Date().toISOString()},{onConflict:'user_id'});
+  }catch{}
+}
+async function fetchServerSchedule(){
+  try{
+    const{data,error}=await supabase.from('fitlog_schedule').select('data').maybeSingle();
+    if(error||!data)return null;
+    return data.data;
+  }catch{return null;}
+}
+async function saveServerSchedule(scheduleData){
+  try{
+    const{data:{user}}=await supabase.auth.getUser();
+    if(!user)return;
+    await supabase.from('fitlog_schedule').upsert({user_id:user.id,data:scheduleData,updated_at:new Date().toISOString()},{onConflict:'user_id'});
+  }catch{}
+}
+async function fetchServerRestDefaults(){
+  try{
+    const{data,error}=await supabase.from('fitlog_rest_defaults').select('data').maybeSingle();
+    if(error||!data)return null;
+    return data.data;
+  }catch{return null;}
+}
+async function saveServerRestDefaults(restData){
+  try{
+    const{data:{user}}=await supabase.auth.getUser();
+    if(!user)return;
+    await supabase.from('fitlog_rest_defaults').upsert({user_id:user.id,data:restData,updated_at:new Date().toISOString()},{onConflict:'user_id'});
+  }catch{}
+}
+// Auth-aware fetch wrapper for the remaining Flask routes (push notifications only)
+async function authedFetch(url,opts={}){
+  const{data:{session}}=await supabase.auth.getSession();
+  const headers={...(opts.headers||{}),'Authorization':'Bearer '+(session?.access_token||'')};
+  return fetch(url,{...opts,headers});
+}
+
 function e1rm(w,r){return(!w||!r||r<=0)?0:Math.round(w*(1+r/30));}
 function getBestE1rm(logs){return logs&&logs.length?Math.max(...logs.map(l=>l.e1rm||0)):0;}
 function fmtVol(v){return v>=1000?(v/1000).toFixed(1)+'k':String(v);}
 function fmtDate(iso){const d=new Date(iso);return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}
 function fmtDur(ms){const m=Math.round(ms/60000);return m>0?m+'m':'<1m';}
+
+function inferBodyPart(name){
+  const n=name.toLowerCase();
+  if(/bench|chest|fly|pec|dip/.test(n))return'Chest';
+  if(/squat|leg press|lunge|quad/.test(n))return'Legs';
+  if(/curl|bicep/.test(n)&&!/leg curl|hamstring/.test(n))return'Biceps';
+  if(/tricep|pushdown|skullcrusher|overhead ext/.test(n))return'Triceps';
+  if(/row|pulldown|pull-?up|lat |deadlift/.test(n))return'Back';
+  if(/shoulder|lateral raise|arnold|delt|shrug|face pull/.test(n))return'Shoulders';
+  if(/calf/.test(n))return'Calves';
+  if(/ab |crunch|plank|russian twist|v up|side bend/.test(n))return'Core';
+  if(/glute|hip thrust|kickback/.test(n))return'Glutes';
+  if(/hamstring|leg curl|romanian/.test(n))return'Hamstrings';
+  return'Other';
+}
+function inferEquipment(name){
+  const n=name.toLowerCase();
+  if(/\(barbell\)|barbell|deadlift|squat \(bb|bench press$/.test(n)&&!/dumbbell|db |smith|hack/.test(n))return'Barbell';
+  if(/\(dumbbell\)|dumbbell|\(db\)|db /.test(n))return'Dumbbell';
+  if(/\(smith\)|smith machine/.test(n))return'Smith Machine';
+  if(/\(cable\)|cable|pushdown|pulldown|crossover/.test(n))return'Cable';
+  if(/\(machine\)|machine|hack squat|leg press|leg ext|leg curl|pec deck|chest press \(m/.test(n))return'Machine';
+  if(/pull-?up$|push-?up|dip$|plank|crunch|russian twist|v up|air ?bike|mountain climber/.test(n))return'Bodyweight';
+  if(/band/.test(n))return'Band';
+  if(/kettlebell|\(kb\)/.test(n))return'Kettlebell';
+  return'Other';
+}
+function getBodyPart(exId,exName){
+  const custom=loadLS('fitlog_custom_bodypart',{});
+  return custom[exId]||inferBodyPart(exName);
+}
+
+// Sunday-start week boundaries for a given date
+function getWeekRange(date){
+  const d=new Date(date);
+  const day=d.getDay(); // 0=Sun
+  const start=new Date(d);start.setHours(0,0,0,0);start.setDate(d.getDate()-day);
+  const end=new Date(start);end.setDate(start.getDate()+7);
+  return{start,end};
+}
+
+// Compute total sets performed per body part within the week containing `refDate`
+function getWeeklyVolume(allLogs,refDate){
+  const{start,end}=getWeekRange(refDate||new Date());
+  const byBodyPart={};
+  Object.entries(allLogs).forEach(([exId,entries])=>{
+    entries.forEach(entry=>{
+      const t=new Date(entry.date);
+      if(t>=start&&t<end){
+        const bp=getBodyPart(exId,entry.exName||exId.replace(/_/g,' '));
+        byBodyPart[bp]=(byBodyPart[bp]||0)+1;
+      }
+    });
+  });
+  return byBodyPart;
+}
+
+// Weekly volume targets (sets/week) — from Anthropic PPL Hypertrophy Restructure v2
+const TARGET_VOLUME={Chest:[20,25],Shoulders:[20,25],Triceps:[20,25],Back:[20,25],Biceps:[20,25],Legs:[20,25],Hamstrings:[20,25],Glutes:[20,25],Calves:[20,25],Core:null,Other:null};
+
+function WeeklyVolumeCard({allLogs}){
+  const[collapsed,setCollapsed]=useState(false);
+  const weeklyVolume=getWeeklyVolume(allLogs,new Date());
+  const bodyPartOrder=['Chest','Back','Shoulders','Biceps','Triceps','Legs','Hamstrings','Glutes','Calves','Core','Other'];
+  const entries=bodyPartOrder.filter(bp=>weeklyVolume[bp]||TARGET_VOLUME[bp]);
+  const{start,end}=getWeekRange(new Date());
+  const endDisplay=new Date(end.getTime()-1);
+  const rangeLabel=start.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' – '+endDisplay.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  if(!entries.length)return null;
+
+  function statusColor(count,target){
+    if(!target)return T.muted;
+    const[lo,hi]=target;
+    if(count>=lo&&count<=hi)return'#34d399';
+    if(count<lo)return'#fbbf24';
+    return'#f87171';
+  }
+
+  return React.createElement('div',{style:{margin:'0 16px 4px',background:T.bg2,borderRadius:14,border:'1px solid '+T.border,overflow:'hidden'}},
+    React.createElement('div',{onClick:()=>setCollapsed(c=>!c),style:{padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},
+      React.createElement('div',{style:{fontSize:16}},'📊'),
+      React.createElement('div',{style:{flex:1}},
+        React.createElement('div',{style:{fontSize:13,fontWeight:700,color:T.text}},'Weekly Volume'),
+        React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1}},rangeLabel)
+      ),
+      React.createElement('div',{style:{fontSize:13,color:T.dim}},collapsed?'⌄':'⌃')
+    ),
+    !collapsed&&React.createElement('div',{style:{padding:'0 16px 14px'}},
+      entries.map(bp=>{
+        const count=weeklyVolume[bp]||0;
+        const target=TARGET_VOLUME[bp];
+        const color=statusColor(count,target);
+        const pct=target?Math.min(100,Math.round((count/target[1])*100)):0;
+        return React.createElement('div',{key:bp,style:{marginBottom:8}},
+          React.createElement('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:3}},
+            React.createElement('div',{style:{fontSize:12,color:T.sub}},bp),
+            React.createElement('div',{style:{fontSize:12,fontFamily:T.mono,fontWeight:700,color}},count+(target?'/'+target[0]+'-'+target[1]:''))
+          ),
+          target&&React.createElement('div',{style:{height:4,borderRadius:2,background:'rgba(148,163,184,0.12)',overflow:'hidden'}},
+            React.createElement('div',{style:{height:'100%',width:pct+'%',background:color,borderRadius:2,transition:'width 0.4s ease'}})
+          )
+        );
+      })
+    )
+  );
+}
 
 function buildSessions(allLogs,workouts){
   const customNames=loadLS('fitlog_custom_ex_names',{});
@@ -85,20 +259,20 @@ async function initPush(){
     const reg=await navigator.serviceWorker.ready;
     let sub=await reg.pushManager.getSubscription();
     if(!sub){
-      const keyRes=await fetch('/api/push/vapid-public-key');
+      const keyRes=await authedFetch('/api/push/vapid-public-key');
       const{key}=await keyRes.json();
       if(!key)return;
       const app=urlB64ToU8(key);
       sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:app});
     }
     _pushSub=sub;
-    const subJson=sub.toJSON();await fetch('/api/push/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:sub.endpoint,keys:{p256dh:subJson.keys.p256dh,auth:subJson.keys.auth}})});
+    const subJson=sub.toJSON();await authedFetch('/api/push/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:sub.endpoint,keys:{p256dh:subJson.keys.p256dh,auth:subJson.keys.auth}})});
   }catch(e){console.warn('push init:',e);}
 }
 
 async function schedulePushTimer(seconds,exerciseName){
   try{
-    const res=await fetch('/api/push/timer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({seconds,exercise:exerciseName})});
+    const res=await authedFetch('/api/push/timer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({seconds,exercise:exerciseName})});
     const d=await res.json();
     if(d.job_id)_activeTimerJobId=d.job_id;
   }catch(e){}
@@ -106,7 +280,7 @@ async function schedulePushTimer(seconds,exerciseName){
 
 async function cancelPushTimer(){
   if(!_activeTimerJobId)return;
-  try{await fetch('/api/push/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({job_id:_activeTimerJobId})});}catch(e){}
+  try{await authedFetch('/api/push/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({job_id:_activeTimerJobId})});}catch(e){}
   _activeTimerJobId=null;
 }
 
@@ -173,6 +347,19 @@ const GYM_LABELS={pm:'Power Matrix',anthropic:'Anthropic',rrb:'RRB',golds:"Gold'
 const TYPE_LABELS={push:'Push',pull:'Pull',legs:'Legs',upper:'Upper Body',full:'Full Body',core:'Core / Abs',other:'Other'};
 const TYPE_COLORS={push:'#e8a020',pull:'#4a9eff',legs:'#7ed9a8',upper:'#a78bfa',full:'#14b8a6',core:'#f472b6',other:'#64748b'};
 
+// Small generic starter set — seeded for every brand-new signup
+const GENERIC_STARTER_WORKOUTS={
+  push_a:{label:'Push A',tag:'Heavy',category:'push',gym:'general',wtype:'push',note:'Rest 2-3 min compound, 60-90 sec isolation.',exercises:[{id:'bench_press',name:'Barbell Bench Press',sets:4,reps:'6-8'},{id:'incline_db_press',name:'Incline DB Press',sets:3,reps:'10-12'},{id:'arnold_press',name:'Arnold Press',sets:3,reps:'10-12'},{id:'db_chest_fly_a',name:'DB Chest Fly',sets:3,reps:'12-15'},{id:'lateral_raise_pa',name:'Lateral Raise',sets:4,reps:'15-20'},{id:'tate_press_a',name:'Tate Press',sets:3,reps:'12-15'},{id:'cable_pushdown_a',name:'Cable Pushdown',sets:3,reps:'15-20'}]},
+  push_b:{label:'Push B',tag:'Volume',category:'push',gym:'general',wtype:'push',note:'Lighter. 60-90 sec rest.',exercises:[{id:'incline_press_b',name:'Incline Barbell Press',sets:4,reps:'10-12'},{id:'weighted_dips',name:'Weighted Dips',sets:3,reps:'8-12'},{id:'flat_db_press_b',name:'Flat DB Press',sets:3,reps:'12-15'},{id:'cable_fly_b',name:'Cable Fly',sets:3,reps:'12-15'},{id:'cable_crossover_b',name:'Cable Crossover',sets:3,reps:'12-15'},{id:'db_shoulder_press_b',name:'DB Shoulder Press',sets:3,reps:'10-12'},{id:'lateral_raise_pb',name:'Lateral Raise',sets:4,reps:'15-20'},{id:'overhead_tri_b',name:'Overhead Tricep',sets:3,reps:'12-15'},{id:'tate_press_b',name:'Tate Press',sets:3,reps:'15-20'}]},
+  pull_a:{label:'Pull A',tag:'Heavy',category:'pull',gym:'general',wtype:'pull',note:'Rest 2-3 min compounds.',exercises:[{id:'deadlift',name:'Deadlift (Barbell)',sets:5,reps:'5'},{id:'lat_pulldown_a',name:'Lat Pulldown',sets:4,reps:'6-10'},{id:'seated_row_a',name:'Seated Row',sets:4,reps:'8-10'},{id:'db_row_a',name:'DB Row',sets:3,reps:'10-12'},{id:'face_pull_a',name:'Face Pull',sets:3,reps:'15-20'},{id:'shrug_a',name:'DB Shrug',sets:3,reps:'12-15'},{id:'incline_curl_a',name:'Incline Curl',sets:3,reps:'10-12'},{id:'hammer_curl_a',name:'Hammer Curl',sets:3,reps:'12-15'}]},
+  pull_b:{label:'Pull B',tag:'Volume',category:'pull',gym:'general',wtype:'pull',note:'Isolation focus.',exercises:[{id:'pullup_b',name:'Pull-Up',sets:4,reps:'8-12'},{id:'chest_row_b',name:'Chest Row',sets:3,reps:'10-12'},{id:'straight_arm_b',name:'Straight Arm',sets:3,reps:'12-15'},{id:'rear_delt_b',name:'Rear Delt Fly',sets:3,reps:'15-20'},{id:'face_pull_b',name:'Face Pull',sets:3,reps:'15-20'},{id:'cable_curl_b',name:'Cable Curl',sets:3,reps:'12-15'},{id:'hammer_curl_b',name:'Hammer Curl',sets:3,reps:'12-15'}]},
+  legs_a:{label:'Legs A',tag:'Quad',category:'legs',gym:'general',wtype:'legs',note:'Rest 2-3 min after squats.',exercises:[{id:'squat_a',name:'Barbell Squat',sets:4,reps:'6-8'},{id:'bss_a',name:'Bulgarian Split Squat',sets:3,reps:'10-12'},{id:'leg_ext_a',name:'Leg Extension',sets:3,reps:'12-15'},{id:'rdl_a',name:'Romanian Deadlift',sets:3,reps:'10-12'},{id:'lying_curl_a',name:'Lying Curl',sets:3,reps:'12-15'},{id:'standing_calf_a',name:'Calf Raise',sets:4,reps:'15-20'}]},
+  legs_b:{label:'Legs B',tag:'Hinge',category:'legs',gym:'general',wtype:'legs',note:'Less CNS.',exercises:[{id:'rdl_b',name:'Romanian Deadlift',sets:4,reps:'8-10'},{id:'leg_press_b',name:'Leg Press',sets:4,reps:'10-15'},{id:'seated_curl_b',name:'Seated Curl',sets:3,reps:'10-12'},{id:'lunge_b',name:'Reverse Lunge',sets:3,reps:'12'},{id:'leg_ext_b',name:'Leg Extension',sets:3,reps:'15-20'},{id:'seated_calf_b',name:'Seated Calf',sets:4,reps:'15-20'}]},
+};
+
+// Mark's full personal program (Power Matrix, Anthropic, RRB, PF, etc.) —
+// used ONLY as seed data during his one-time account migration, never
+// auto-injected into other users' accounts.
 const DEFAULT_WORKOUTS={
   pm_push:{label:'Power Matrix Push',tag:'PM Heavy',category:'push',gym:'pm',wtype:'push',note:'Power Matrix bench day. Complete every rep before advancing.',exercises:[{id:'bench_press',name:'Barbell Bench Press',sets:7,reps:'8/8/3/1/1/1/5'},{id:'incline_db_press',name:'Incline DB Press',sets:3,reps:'10-12'},{id:'arnold_press',name:'Arnold Press',sets:3,reps:'10-12'},{id:'db_chest_fly_a',name:'DB Chest Fly',sets:3,reps:'12-15'},{id:'lateral_raise_pa',name:'Lateral Raise',sets:4,reps:'15-20'},{id:'tate_press_a',name:'Tate Press',sets:3,reps:'12-15'},{id:'cable_pushdown_a',name:'Cable Pushdown',sets:3,reps:'15-20'}]},
   pm_pull:{label:'Power Matrix Pull',tag:'PM Heavy',category:'pull',gym:'pm',wtype:'pull',note:'Power Matrix deadlift day. Complete every rep before advancing.',exercises:[{id:'deadlift',name:'Deadlift (Barbell)',sets:7,reps:'8/8/3/1/1/1/5'},{id:'lat_pulldown_a',name:'Lat Pulldown',sets:4,reps:'6-10'},{id:'seated_row_a',name:'Seated Row',sets:4,reps:'8-10'},{id:'db_row_a',name:'DB Row',sets:3,reps:'10-12'},{id:'face_pull_a',name:'Face Pull',sets:3,reps:'15-20'},{id:'shrug_a',name:'DB Shrug',sets:3,reps:'12-15'},{id:'incline_curl_a',name:'Incline Curl',sets:3,reps:'10-12'},{id:'hammer_curl_a',name:'Hammer Curl',sets:3,reps:'12-15'}]},
@@ -461,11 +648,16 @@ function ExerciseBlock({ex,accent,allLogs,setAllLogs,restDefaults,onSetLogged,on
   );
 }
 
-function WorkoutSummary({workout,duration,prs,setsLogged,volumeLogged,onClose}){
+function WorkoutSummary({workout,duration,prs,setsLogged,volumeLogged,allLogs,wKey,onClose}){
   const mins=Math.floor(duration/60),secs=duration%60;
   const timeStr=(mins>0?mins+'m ':'')+secs+'s';
   const[note,setNote]=useState('');
   function saveAndClose(){if(note.trim()){saveLS('workout_note_'+Date.now(),{date:new Date().toISOString(),workout:workout.label,note:note.trim()});}onClose();}
+
+  const weeklyVolume=allLogs?getWeeklyVolume(allLogs,new Date()):{};
+  const bodyPartOrder=['Chest','Back','Shoulders','Biceps','Triceps','Legs','Hamstrings','Glutes','Calves','Core','Other'];
+  const isWeekEnd=wKey==='pf_sat';
+  const weekEntries=bodyPartOrder.filter(bp=>weeklyVolume[bp]);
   return React.createElement('div',{style:{position:'fixed',inset:0,zIndex:500,background:T.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,fontFamily:T.sans,overflowY:'auto'}},
     React.createElement('div',{style:{fontSize:48,marginBottom:16}},'🏆'),
     React.createElement('div',{style:{fontSize:26,fontWeight:800,color:T.text,marginBottom:4,letterSpacing:'-0.02em'}},'Workout Done!'),
@@ -479,6 +671,13 @@ function WorkoutSummary({workout,duration,prs,setsLogged,volumeLogged,onClose}){
     prs.length>0&&React.createElement('div',{style:{width:'100%',maxWidth:360,marginBottom:24,padding:'14px 16px',background:'rgba(251,191,36,0.08)',borderRadius:12,border:'1px solid rgba(251,191,36,0.25)'}},
       React.createElement('div',{style:{fontSize:12,color:'#fbbf24',fontWeight:700,marginBottom:8,textTransform:'uppercase',letterSpacing:'0.08em'}},'🏆 New PRs'),
       prs.map((pr,i)=>React.createElement('div',{key:i,style:{fontSize:14,color:T.sub,marginBottom:3}},pr))
+    ),
+    weekEntries.length>0&&React.createElement('div',{style:{width:'100%',maxWidth:360,marginBottom:24,padding:'16px',background:isWeekEnd?'rgba(232,160,32,0.08)':T.bg2,borderRadius:14,border:'1px solid '+(isWeekEnd?'rgba(232,160,32,0.3)':T.border)}},
+      React.createElement('div',{style:{fontSize:12,color:isWeekEnd?'#e8a020':T.dim,fontWeight:700,marginBottom:10,textTransform:'uppercase',letterSpacing:'0.08em'}},isWeekEnd?'📊 Week Complete — Total Sets':'This Week — Sets So Far'),
+      weekEntries.map(bp=>React.createElement('div',{key:bp,style:{display:'flex',justifyContent:'space-between',padding:'4px 0',fontSize:13}},
+        React.createElement('div',{style:{color:T.sub}},bp),
+        React.createElement('div',{style:{color:T.text,fontWeight:700,fontFamily:T.mono}},weeklyVolume[bp])
+      ))
     ),
     React.createElement('textarea',{placeholder:'Workout notes... (optional)',value:note,onChange:e=>setNote(e.target.value),style:{width:'100%',maxWidth:360,padding:'12px 14px',background:T.bg2,border:'1px solid '+T.border2,borderRadius:12,color:T.text,fontSize:14,fontFamily:T.sans,resize:'none',minHeight:80,marginBottom:16,lineHeight:1.5}}),
     React.createElement('button',{onClick:saveAndClose,style:{width:'100%',maxWidth:360,padding:18,borderRadius:14,border:'none',background:GRAD.button,color:'#fff',fontWeight:700,fontSize:17,cursor:'pointer',minHeight:60,WebkitTapHighlightColor:'transparent',boxShadow:'0 8px 28px rgba(124,58,237,0.4)'}},'Save & Finish')
@@ -608,11 +807,11 @@ function SessionEditor({session,workouts,onUpdateLog,onDeleteSet,onAddExercise,o
         editingName
           ?React.createElement('div',{style:{display:'flex',gap:8,alignItems:'center'}},
             React.createElement('input',{type:'text',value:nameVal,onChange:e=>setNameVal(e.target.value),autoFocus:true,style:{flex:1,padding:'6px 10px',background:T.bg3,border:'1px solid #7c3aed',borderRadius:8,color:T.text,fontSize:15,fontFamily:T.mono}}),
-            React.createElement('button',{onClick:()=>{onRename&&onRename(session,nameVal.trim()||session.workoutLabel);setEditingName(false);},style:{padding:'6px 10px',borderRadius:7,border:'none',background:'#7c3aed',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}},'Save'),
+            React.createElement('button',{onClick:()=>{const finalName=nameVal.trim()||session.workoutLabel;onRename&&onRename(session,finalName);setNameVal(finalName);setEditingName(false);},style:{padding:'6px 10px',borderRadius:7,border:'none',background:'#7c3aed',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}},'Save'),
             React.createElement('button',{onClick:()=>{setNameVal(session.workoutLabel);setEditingName(false);},style:{padding:'6px 8px',borderRadius:7,border:'1px solid '+T.border2,background:'transparent',color:T.muted,fontSize:13,cursor:'pointer'}},'X')
           )
           :React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8}},
-            React.createElement('div',{style:{fontSize:17,fontWeight:700,color:T.text}},session.workoutLabel),
+            React.createElement('div',{style:{fontSize:17,fontWeight:700,color:T.text}},nameVal),
             React.createElement('button',{onClick:()=>setEditingName(true),style:{padding:'3px 8px',borderRadius:6,border:'1px solid '+T.border2,background:'transparent',color:T.dim,fontSize:11,cursor:'pointer'}},'Rename')
           ),
         React.createElement('div',{style:{fontSize:12,color:T.muted}},fmtDate(session.date)+' · '+session.sets.length+' sets')
@@ -711,7 +910,7 @@ function HistoryView({allLogs,workouts,onUpdateLog,onDeleteSet,onDeleteSession,o
   if(editingSession!==null&&sessions[editingSession]){
     return React.createElement(SessionEditor,{
       session:sessions[editingSession],workouts,onUpdateLog,onDeleteSet,onAddExercise,
-      onRename:(session,newName)=>{saveLS('session_label_'+session.id,newName);},
+      onRename:(session,newName)=>{saveLS('session_label_'+session.id,newName);setSessions(buildSessions(allLogs,workouts));},
       onClose:()=>setEditingSession(null)
     });
   }
@@ -1155,33 +1354,6 @@ function ExerciseDatabase({workouts,restDefaults,onSaveRestDefaults,onSaveExerci
   const[newDraft,setNewDraft]=useState({name:'',sets:3,reps:'8-12',restSec:120,bodyPart:'Other',equipment:'Other'});
 
   // Body part inference from exercise name
-  function inferBodyPart(name){
-    const n=name.toLowerCase();
-    if(/bench|chest|fly|pec|dip/.test(n))return'Chest';
-    if(/squat|leg press|lunge|quad/.test(n))return'Legs';
-    if(/curl|bicep/.test(n)&&!/leg curl|hamstring/.test(n))return'Biceps';
-    if(/tricep|pushdown|skullcrusher|overhead ext/.test(n))return'Triceps';
-    if(/row|pulldown|pull-?up|lat |deadlift/.test(n))return'Back';
-    if(/shoulder|lateral raise|arnold|delt|shrug|face pull/.test(n))return'Shoulders';
-    if(/calf/.test(n))return'Calves';
-    if(/ab |crunch|plank|russian twist|v up|side bend/.test(n))return'Core';
-    if(/glute|hip thrust|kickback/.test(n))return'Glutes';
-    if(/hamstring|leg curl|romanian/.test(n))return'Hamstrings';
-    return'Other';
-  }
-  function inferEquipment(name){
-    const n=name.toLowerCase();
-    if(/\(barbell\)|barbell|deadlift|squat \(bb|bench press$/.test(n)&&!/dumbbell|db |smith|hack/.test(n))return'Barbell';
-    if(/\(dumbbell\)|dumbbell|\(db\)|db /.test(n))return'Dumbbell';
-    if(/\(smith\)|smith machine/.test(n))return'Smith Machine';
-    if(/\(cable\)|cable|pushdown|pulldown|crossover/.test(n))return'Cable';
-    if(/\(machine\)|machine|hack squat|leg press|leg ext|leg curl|pec deck|chest press \(m/.test(n))return'Machine';
-    if(/pull-?up$|push-?up|dip$|plank|crunch|russian twist|v up|air ?bike|mountain climber/.test(n))return'Bodyweight';
-    if(/band/.test(n))return'Band';
-    if(/kettlebell|\(kb\)/.test(n))return'Kettlebell';
-    return'Other';
-  }
-
   // Build deduplicated exercise list with their workout context
   const customEquip=loadLS('fitlog_custom_equipment',{});
   const allExercises=[];
@@ -1574,13 +1746,10 @@ function parseFitLogRoutineCSV(text){
 
 function PPLTracker(){
   const[workouts,setWorkoutsRaw]=useState(()=>{
-    const stored=loadLS('fitlog_workouts',null);
-    // Always merge defaults into whatever is stored (or use defaults if nothing stored)
-    const merged={...(stored||{})};
-    Object.entries(DEFAULT_WORKOUTS).forEach(([k,w])=>{merged[k]=w;});
-    // Save merged result back to localStorage immediately
-    saveLS('fitlog_workouts',merged);
-    return merged;
+    // Just use whatever's cached locally (from last server sync); the
+    // useEffect below fetches the authoritative copy from Supabase and
+    // seeds a new account with GENERIC_STARTER_WORKOUTS if it's truly empty.
+    return loadLS('fitlog_workouts',null)||GENERIC_STARTER_WORKOUTS;
   });
   const[schedule,setScheduleRaw]=useState(()=>{const s=loadLS('fitlog_schedule',null);return Array.isArray(s)&&s.length>0?s:DEFAULT_SCHEDULE;});
   const[restDefaults,setRestDefaultsRaw]=useState(loadRestDefaults);
@@ -1591,7 +1760,7 @@ function PPLTracker(){
     const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     const today=days[new Date().getDay()];
     const todayItem=sched.find(x=>x.day===today);
-    return(todayItem&&todayItem.workoutKey)||'pm_push';
+    return(todayItem&&todayItem.workoutKey)||'push_a';
   });
   const[tab,setTab]=useState('workout');
   const[activeWorkout,setActiveWorkout]=useState(false);
@@ -1633,25 +1802,46 @@ function PPLTracker(){
   const currentSessionId=useRef(null);
 
   function setWorkouts(w){setWorkoutsRaw(w);saveLS('fitlog_workouts',w);saveServerWorkouts(w);}
-  function setSchedule(w){setScheduleRaw(w);saveLS('fitlog_schedule',w);}
-  function setRestDefaults(d){setRestDefaultsRaw(d);saveLS('fitlog_rest_defaults',d);}
+  function setSchedule(w){setScheduleRaw(w);saveLS('fitlog_schedule',w);saveServerSchedule(w);}
+  function setRestDefaults(d){setRestDefaultsRaw(d);saveLS('fitlog_rest_defaults',d);saveServerRestDefaults(d);}
   function handleReorder(newOrder){saveLS('fitlog_routine_order',newOrder);}
   function handleArchive(key){setWorkouts({...workouts,[key]:{...workouts[key],archived:true}});}
   function handleUnarchive(key){setWorkouts({...workouts,[key]:{...workouts[key],archived:false}});}
 
   useEffect(()=>{
     fetchAllLogs().then(data=>setAllLogs(data)).catch(()=>{});
+
     fetchServerWorkouts().then(data=>{
-      const base=data&&Object.keys(data).length>0?data:{};
-      // Always inject ALL default workouts
-      const merged={...base};
-      Object.entries(DEFAULT_WORKOUTS).forEach(([k,w])=>{merged[k]=w;});
-      setWorkoutsRaw(merged);
-      saveLS('fitlog_workouts',merged);
-      // Always save back to server (creates record if empty, updates if stale)
-      saveServerWorkouts(merged);
+      if(data&&Object.keys(data).length>0){
+        // Existing user — use exactly what's saved server-side, no auto-injection
+        setWorkoutsRaw(data);
+        saveLS('fitlog_workouts',data);
+      } else {
+        // Brand new account — seed with the small generic starter set only
+        setWorkoutsRaw(GENERIC_STARTER_WORKOUTS);
+        saveLS('fitlog_workouts',GENERIC_STARTER_WORKOUTS);
+        saveServerWorkouts(GENERIC_STARTER_WORKOUTS);
+      }
       setWorkoutsLoaded(true);
     }).catch(()=>setWorkoutsLoaded(true));
+
+    fetchServerSchedule().then(data=>{
+      if(data&&Array.isArray(data)&&data.length>0){
+        setScheduleRaw(data);
+        saveLS('fitlog_schedule',data);
+      } else {
+        saveServerSchedule(DEFAULT_SCHEDULE);
+      }
+    }).catch(()=>{});
+
+    fetchServerRestDefaults().then(data=>{
+      if(data&&Object.keys(data).length>0){
+        setRestDefaultsRaw(data);
+        saveLS('fitlog_rest_defaults',data);
+      } else {
+        saveServerRestDefaults(restDefaults);
+      }
+    }).catch(()=>{});
   },[]);
 
   function startWorkout(){
@@ -1680,7 +1870,7 @@ function PPLTracker(){
     workoutStartTimeRef.current=null;
     if(visHandlerRef.current){document.removeEventListener('visibilitychange',visHandlerRef.current);visHandlerRef.current=null;}
   }
-  function finishWorkout(){stopElapsedTimer();setActiveTimer(null);setActiveWorkout(false);setSummary({workout:workouts[wKey],duration:elapsedSec,prs,setsLogged,volumeLogged});}
+  function finishWorkout(){stopElapsedTimer();setActiveTimer(null);setActiveWorkout(false);setSummary({workout:workouts[wKey],duration:elapsedSec,prs,setsLogged,volumeLogged,allLogs,wKey});}
   function handleSetLogged(exId,exName){
     const secs=getRestDuration(exId,restDefaults);
     setActiveTimer({exerciseId:exId,exerciseName:exName,seconds:secs});
@@ -1780,8 +1970,13 @@ function PPLTracker(){
     setPendingRoutineImport(null);
   }
 
-  const workout=workouts[wKey];
+  const workout=workouts[wKey]||Object.values(workouts)[0];
   const accent=CAT[workout?.category]||'#06b6d4';
+  useEffect(()=>{
+    if(!workouts[wKey]&&Object.keys(workouts).length>0){
+      setWKey(Object.keys(workouts)[0]);
+    }
+  },[workouts,wKey]);
   const elMins=String(Math.floor(elapsedSec/60)).padStart(2,'0'),elSecs=String(elapsedSec%60).padStart(2,'0');
   const restSecs=activeTimer?activeTimer.seconds:120;
   const restLabel=Math.floor(restSecs/60)+':'+(restSecs%60<10?'0':'')+restSecs%60;
@@ -1796,6 +1991,12 @@ function PPLTracker(){
   );
 
   if(summary)return React.createElement(WorkoutSummary,{...summary,onClose:()=>setSummary(null)});
+
+  if(!workout){
+    return React.createElement('div',{style:{minHeight:'100vh',background:T.bg,display:'flex',alignItems:'center',justifyContent:'center'}},
+      React.createElement('div',{style:{fontSize:14,color:T.muted}},'Loading...')
+    );
+  }
 
   // ── ACTIVE WORKOUT SCREEN ─────────────────────────────────────────────────
   if(activeWorkout){
@@ -1927,7 +2128,7 @@ function PPLTracker(){
       React.createElement('div',{style:{position:'sticky',top:0,zIndex:10,backdropFilter:'blur(16px)',borderBottom:'1px solid '+T.border,padding:'0 16px',background:'linear-gradient(180deg,'+T.bg+'f8 0%,'+T.bg+'e0 100%)'}},
         React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',paddingTop:16,paddingBottom:12}},
           React.createElement('div',{style:{fontSize:22,fontWeight:800,background:GRAD.accent,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',letterSpacing:'-0.03em'}},'FitLog'),
-          React.createElement('a',{href:'/logout',style:{width:38,height:38,borderRadius:10,border:'1px solid '+T.border2,background:'rgba(255,255,255,0.03)',color:T.muted,textDecoration:'none',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,WebkitTapHighlightColor:'transparent'}},'\u238b')
+          React.createElement('button',{onClick:()=>supabase.auth.signOut(),style:{width:38,height:38,borderRadius:10,border:'1px solid '+T.border2,background:'rgba(255,255,255,0.03)',color:T.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,WebkitTapHighlightColor:'transparent'}},'\u238b')
         ),
         React.createElement('div',{style:{display:'flex',gap:6,overflowX:'auto',paddingBottom:14,scrollbarWidth:'none'}},
           // Tab strip mirrors the current weekly schedule — unique workout keys, in day order (Sun-Sat), deduped
@@ -1959,6 +2160,7 @@ function PPLTracker(){
           )
         );
       })(),
+      React.createElement(WeeklyVolumeCard,{allLogs}),
       React.createElement('div',{style:{padding:'16px 16px 0'}},
         React.createElement('div',{style:{padding:'16px 18px',background:'linear-gradient(135deg,'+accent+'18,'+accent+'06)',borderRadius:16,border:'1px solid '+accent+'35',marginBottom:4}},
           React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}},
@@ -2090,4 +2292,75 @@ function PPLTracker(){
   );
 }
 
-ReactDOM.render(React.createElement(PPLTracker),document.getElementById('root'));
+function AuthScreen({onAuthed}){
+  const[mode,setMode]=useState('login'); // login | signup
+  const[email,setEmail]=useState('');
+  const[password,setPassword]=useState('');
+  const[error,setError]=useState('');
+  const[loading,setLoading]=useState(false);
+
+  async function handleSubmit(e){
+    e.preventDefault();
+    setError('');setLoading(true);
+    try{
+      if(mode==='signup'){
+        const{data,error:err}=await supabase.auth.signUp({email,password});
+        if(err)throw err;
+        if(data.session)onAuthed();
+        else setError('Check your email to confirm your account, then log in.');
+      } else {
+        const{error:err}=await supabase.auth.signInWithPassword({email,password});
+        if(err)throw err;
+        onAuthed();
+      }
+    }catch(err){
+      setError(err.message||'Something went wrong.');
+    }finally{
+      setLoading(false);
+    }
+  }
+
+  return React.createElement('div',{style:{minHeight:'100vh',background:T.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,fontFamily:T.sans}},
+    React.createElement('div',{style:{width:'100%',maxWidth:360}},
+      React.createElement('div',{style:{textAlign:'center',marginBottom:32}},
+        React.createElement('div',{style:{fontSize:32,fontWeight:800,background:GRAD.accent,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',letterSpacing:'-0.03em'}},'FitLog'),
+        React.createElement('div',{style:{fontSize:13,color:T.muted,marginTop:6}},mode==='login'?'Welcome back':'Create your account')
+      ),
+      React.createElement('form',{onSubmit:handleSubmit},
+        React.createElement('input',{type:'email',placeholder:'Email',value:email,onChange:e=>setEmail(e.target.value),autoCapitalize:'off',autoCorrect:'off',required:true,style:{width:'100%',padding:'13px 14px',background:T.bg2,border:'1px solid '+T.border2,borderRadius:10,color:T.text,fontSize:15,fontFamily:T.sans,marginBottom:10,minHeight:48}}),
+        React.createElement('input',{type:'password',placeholder:'Password',value:password,onChange:e=>setPassword(e.target.value),required:true,minLength:6,style:{width:'100%',padding:'13px 14px',background:T.bg2,border:'1px solid '+T.border2,borderRadius:10,color:T.text,fontSize:15,fontFamily:T.sans,marginBottom:16,minHeight:48}}),
+        error&&React.createElement('div',{style:{fontSize:13,color:'#f87171',marginBottom:14,padding:'10px 12px',background:'rgba(239,68,68,0.1)',borderRadius:8,lineHeight:1.4}},error),
+        React.createElement('button',{type:'submit',disabled:loading,style:{width:'100%',padding:15,borderRadius:12,border:'none',background:GRAD.button,color:'#fff',fontWeight:700,fontSize:16,cursor:loading?'default':'pointer',minHeight:52,opacity:loading?0.6:1,WebkitTapHighlightColor:'transparent'}},loading?'...':(mode==='login'?'Log In':'Sign Up'))
+      ),
+      React.createElement('div',{style:{textAlign:'center',marginTop:20}},
+        React.createElement('button',{onClick:()=>{setMode(m=>m==='login'?'signup':'login');setError('');},style:{background:'none',border:'none',color:T.muted,fontSize:13,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},
+          mode==='login'?"Don't have an account? Sign up":'Already have an account? Log in'
+        )
+      )
+    )
+  );
+}
+
+function AppRoot(){
+  const[session,setSession]=useState(undefined); // undefined = loading, null = logged out, object = logged in
+
+  useEffect(()=>{
+    supabase.auth.getSession().then(({data})=>setSession(data.session));
+    const{data:listener}=supabase.auth.onAuthStateChange((_event,newSession)=>{
+      setSession(newSession);
+    });
+    return()=>listener.subscription.unsubscribe();
+  },[]);
+
+  if(session===undefined){
+    return React.createElement('div',{style:{minHeight:'100vh',background:T.bg,display:'flex',alignItems:'center',justifyContent:'center'}},
+      React.createElement('div',{style:{fontSize:14,color:T.muted}},'Loading...')
+    );
+  }
+  if(!session){
+    return React.createElement(AuthScreen,{onAuthed:()=>{}});
+  }
+  return React.createElement(PPLTracker,{key:session.user.id});
+}
+
+ReactDOM.render(React.createElement(AppRoot),document.getElementById('root'));
