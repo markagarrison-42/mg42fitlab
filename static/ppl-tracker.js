@@ -1568,6 +1568,7 @@ function PPLTracker(){
   const[newRoutineName,setNewRoutineName]=useState('');
   const[activeExercises,setActiveExercises]=useState(null); // null = use workout.exercises
   const[exMenu,setExMenu]=useState(null); // {exIdx, ex}
+  const[headerMenu,setHeaderMenu]=useState(false);
   const[swapTarget,setSwapTarget]=useState(null); // exIdx being swapped
 
   function getActiveExercises(){return activeExercises||workout.exercises;}
@@ -1726,16 +1727,19 @@ function PPLTracker(){
 
     
     return React.createElement('div',{style:{minHeight:'100vh',background:T.bg,color:T.text,fontFamily:T.sans,maxWidth:680,margin:'0 auto',paddingBottom:120,WebkitOverflowScrolling:'touch'}},
-      React.createElement('div',{style:{position:'static',background:T.bg,borderBottom:'1px solid '+T.border,padding:'calc(env(safe-area-inset-top) + 10px) 16px 10px',display:'flex',alignItems:'center',gap:12}},
-        React.createElement('div',{onClick:()=>{},style:{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',borderRadius:20,background:'rgba(59,130,246,0.2)',border:'1px solid rgba(59,130,246,0.4)',cursor:'pointer',flexShrink:0}},
+      React.createElement('div',{style:{position:'static',background:T.bg,borderBottom:'1px solid '+T.border,padding:'calc(env(safe-area-inset-top) + 10px) 16px 10px',display:'flex',alignItems:'center',gap:10}},
+        React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',borderRadius:20,background:'rgba(59,130,246,0.2)',border:'1px solid rgba(59,130,246,0.4)',flexShrink:0}},
           React.createElement('div',{style:{fontSize:14}},'⏱'),
           React.createElement('div',{style:{fontFamily:T.mono,fontSize:14,fontWeight:700,color:'#3b82f6'}},activeTimer?(String(Math.floor((activeTimer.seconds||0)/60)).padStart(2,'0')+':'+String((activeTimer.seconds||0)%60).padStart(2,'0')):'0:00')
         ),
         React.createElement('div',{style:{flex:1,textAlign:'center',fontFamily:T.mono,fontSize:16,fontWeight:700,color:T.sub}},elMins+':'+elSecs),
-        React.createElement('div',{style:{display:'flex',gap:8,alignItems:'center'}},
-          React.createElement('button',{onClick:wakeLock.toggle,style:{width:40,height:40,borderRadius:10,border:'1px solid '+(wakeLock.active?'#14b8a6':T.border2),background:wakeLock.active?'rgba(20,184,166,0.15)':'transparent',color:wakeLock.active?'#5eead4':T.dim,fontSize:18,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},wakeLock.active?'🔒':'🔓'),
-          React.createElement('button',{onClick:finishWorkout,style:{padding:'9px 20px',borderRadius:20,border:'none',background:'#22c55e',color:'#fff',fontWeight:700,fontSize:15,cursor:'pointer',WebkitTapHighlightColor:'transparent',minHeight:40}},'✓ Finish'),
-        React.createElement('button',{onClick:()=>setSaveAsNewRoutine(true),style:{padding:'9px 14px',borderRadius:20,border:'1px solid rgba(20,184,166,0.5)',background:'rgba(20,184,166,0.1)',color:'#5eead4',fontWeight:600,fontSize:13,cursor:'pointer',WebkitTapHighlightColor:'transparent',minHeight:40}},'+New')
+        React.createElement('button',{onClick:()=>setHeaderMenu(m=>!m),style:{width:36,height:36,borderRadius:10,border:'1px solid '+T.border2,background:'rgba(255,255,255,0.04)',color:T.muted,fontSize:16,cursor:'pointer',WebkitTapHighlightColor:'transparent',flexShrink:0,lineHeight:1}},'⋯'),
+        React.createElement('button',{onClick:finishWorkout,style:{padding:'9px 18px',borderRadius:20,border:'none',background:'#22c55e',color:'#fff',fontWeight:700,fontSize:14,cursor:'pointer',WebkitTapHighlightColor:'transparent',minHeight:40,flexShrink:0}},'✓ Finish')
+      ),
+      headerMenu&&React.createElement('div',{onClick:()=>setHeaderMenu(false),style:{position:'fixed',inset:0,zIndex:400,background:'rgba(0,0,0,0.5)'}},
+        React.createElement('div',{onClick:e=>e.stopPropagation(),style:{position:'absolute',top:'calc(env(safe-area-inset-top) + 56px)',right:16,background:T.bg2,borderRadius:12,border:'1px solid '+T.border,minWidth:180,overflow:'hidden',boxShadow:'0 8px 30px rgba(0,0,0,0.5)'}},
+          React.createElement('button',{onClick:()=>{wakeLock.toggle();setHeaderMenu(false);},style:{width:'100%',padding:'12px 16px',border:'none',background:'transparent',color:wakeLock.active?'#5eead4':T.sub,fontSize:14,fontWeight:600,cursor:'pointer',textAlign:'left',display:'flex',alignItems:'center',gap:8}},(wakeLock.active?'🔒':'🔓')+'  Keep Screen On'),
+          React.createElement('button',{onClick:()=>{setSaveAsNewRoutine(true);setHeaderMenu(false);},style:{width:'100%',padding:'12px 16px',border:'none',background:'transparent',color:'#5eead4',fontSize:14,fontWeight:600,cursor:'pointer',textAlign:'left',borderTop:'1px solid '+T.border}},'💾  Save as New Routine')
         )
       ),
       React.createElement('div',{style:{padding:'10px 16px 4px',display:'flex',alignItems:'center',gap:8,background:T.bg}},
@@ -1743,6 +1747,15 @@ function PPLTracker(){
         React.createElement('div',{style:{flex:1,fontSize:15,fontWeight:600,color:T.text}},workout.label),
         React.createElement('div',{style:{fontFamily:T.mono,fontSize:12,color:T.muted}},setsLogged+' sets  '+fmtVol(volumeLogged)+'lb')
       ),
+      (()=>{
+        const totalSets=getActiveExercises().reduce((t,ex)=>t+ex.sets,0);
+        const pct=totalSets>0?Math.min(100,Math.round((setsLogged/totalSets)*100)):0;
+        return React.createElement('div',{style:{padding:'0 16px 10px'}},
+          React.createElement('div',{style:{height:5,borderRadius:3,background:'rgba(148,163,184,0.12)',overflow:'hidden'}},
+            React.createElement('div',{style:{height:'100%',width:pct+'%',background:GRAD.button,borderRadius:3,transition:'width 0.4s ease'}})
+          )
+        );
+      })(),
       React.createElement('div',null,getActiveExercises().map((ex,exIdx)=>React.createElement(ActiveExBlock,{key:wKey+'-'+ex.id+'-'+exIdx,ex,allLogs,setAllLogs,workout,restDefaults,handleSetLogged,handlePR,setSetsLogged,setVolumeLogged,restLabel,onMenu:(ex)=>setExMenu({ex,exIdx})}))),
       exMenu&&React.createElement(ExerciseMenu,{ex:exMenu.ex,exIdx:exMenu.exIdx,restDefaults,workouts,onAddSet:addSetToEx,onRemoveSet:removeSetFromEx,onDelete:deleteEx,onSwap:swapEx,onSetRest:setExRestTimer,onClose:()=>setExMenu(null)}),
       React.createElement('div',{style:{padding:'16px',display:'flex',flexDirection:'column',gap:10}},
