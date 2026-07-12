@@ -216,14 +216,14 @@ const DEFAULT_WORKOUTS={
     {id:'rope_tricep_pushdown',name:'Rope Tricep Pushdown',sets:4,reps:'8-10'},
     {id:'single_arm_tricep_extension',name:'Single Arm Tricep Extension',sets:3,reps:'10-12'}]},
   anthropic_pull_heavy:{label:'Pull (Heavy)',tag:'Heavy',category:'pull',gym:'anthropic',wtype:'pull',note:'Heavy pull day.',exercises:[
-    {id:'lat_pulldown_heavy',name:'Lat Pulldown (Heavy)',sets:7,reps:'8/8/3/1/1/1/5'},
+    {id:'deadlift_barbell',name:'Deadlift (Barbell)',sets:7,reps:'8/8/3/1/1/1/5'},
     {id:'seated_row_heavy',name:'Seated Row (Heavy)',sets:4,reps:'6-8'},
     {id:'shrug_db',name:'Shrug (DB)',sets:4,reps:'12-15'},
     {id:'face_pull_cable',name:'Face Pull (Cable)',sets:3,reps:'12-15'},
     {id:'incline_curl_db',name:'Incline Curl (DB)',sets:4,reps:'10-12'},
     {id:'overhead_cable_curl',name:'Overhead Cable Curl',sets:3,reps:'10-12'}]},
   anthropic_legs_heavy:{label:'Legs (Heavy)',tag:'Heavy',category:'legs',gym:'anthropic',wtype:'legs',note:'Heavy leg day.',exercises:[
-    {id:'hack_squat',name:'Hack Squat',sets:7,reps:'8/8/3/1/1/1/5'},
+    {id:'squat_barbell',name:'Squat (Barbell)',sets:7,reps:'8/8/3/1/1/1/5'},
     {id:'romanian_deadlift_smith',name:'Romanian Deadlift (Smith)',sets:4,reps:'6-8'},
     {id:'bulgarian_split_squat',name:'Bulgarian Split Squat',sets:3,reps:'8-10'},
     {id:'leg_extension',name:'Leg Extension',sets:3,reps:'12-15'},
