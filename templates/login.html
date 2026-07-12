@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0d10">
+  <title>FitLog — Sign in</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0b0d10; color: #e8eaf0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif;
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 24px; -webkit-font-smoothing: antialiased;
+    }
+    .box { width: 100%; max-width: 340px; }
+    .mark {
+      font-family: "Courier New", monospace;
+      font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
+      color: #e8a020; margin-bottom: 32px; text-align: center;
+    }
+    h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 6px; }
+    .sub { font-size: 13px; color: #4a5568; margin-bottom: 28px; }
+    .field { margin-bottom: 14px; }
+    .field label {
+      display: block; font-size: 10px; font-weight: 600;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      color: #4a5568; margin-bottom: 6px;
+    }
+    .field input {
+      width: 100%; background: #13161b; border: 1px solid #252c3a;
+      border-radius: 10px; color: #e8eaf0; font-size: 16px;
+      padding: 14px 16px; outline: none; -webkit-appearance: none;
+      transition: border-color 0.15s;
+    }
+    .field input:focus { border-color: #e8a020; }
+    .btn {
+      width: 100%; background: #e8a020; color: #0b0d10;
+      font-size: 15px; font-weight: 700; padding: 15px;
+      border: none; border-radius: 10px; cursor: pointer;
+      margin-top: 4px; transition: opacity 0.15s;
+    }
+    .btn:active { opacity: 0.8; }
+    .error { color: #ff5252; font-size: 13px; margin-top: 12px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="mark">FitLog</div>
+    <h1>Sign in</h1>
+    <p class="sub">Push / Pull / Legs tracker</p>
+    <form method="POST">
+      <div class="field">
+        <label>Username</label>
+        <input type="text" name="username" autocapitalize="none" spellcheck="false" autocomplete="username">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" name="password" autocomplete="current-password">
+      </div>
+      <button class="btn" type="submit">Sign in</button>
+      {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    </form>
+  </div>
+</body>
+</html>

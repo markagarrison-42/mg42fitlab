@@ -1,0 +1,45 @@
+{
+  "name": "MG42 FitLog",
+  "short_name": "FitLog",
+  "description": "Personal fitness tracker — strength, rowing, body, nutrition, protocol",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#0f172a",
+  "background_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/static/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["health", "fitness", "lifestyle"],
+  "shortcuts": [
+    {
+      "name": "Log a set",
+      "short_name": "Lift",
+      "url": "/?page=strength",
+      "description": "Log a strength set"
+    },
+    {
+      "name": "Log a row",
+      "short_name": "Row",
+      "url": "/?page=rowing",
+      "description": "Log a rowing session"
+    },
+    {
+      "name": "Log protein",
+      "short_name": "Nutrition",
+      "url": "/?page=nutrition",
+      "description": "Log protein intake"
+    }
+  ]
+}
