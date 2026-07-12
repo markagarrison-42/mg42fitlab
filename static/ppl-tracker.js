@@ -1529,6 +1529,44 @@ function ExerciseMenu({ex,exIdx,restDefaults,workouts,onAddSet,onRemoveSet,onDel
   );
 }
 
+// ── CUSTOM FITLOG ROUTINE CSV FORMAT ──────────────────────────────────────────
+// Columns: routine,exercise_id,exercise_name,sets,reps,note
+// 'reps' can be a rep range like "6-8" or the word "ramp" for Power Matrix ramp scheme
+function parseFitLogRoutineCSV(text){
+  const lines=text.trim().split(/\r?\n/);
+  if(!lines.length)return null;
+  function parseLine(line){const fields=[];let cur='',inQ=false;for(let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){inQ=!inQ;}else if(ch===','&&!inQ){fields.push(cur.trim());cur='';}else{cur+=ch;}}fields.push(cur.trim());return fields;}
+  const header=parseLine(lines[0]).map(h=>h.toLowerCase());
+  const iRoutine=header.indexOf('routine'),iExId=header.indexOf('exercise_id'),iExName=header.indexOf('exercise_name'),iSets=header.indexOf('sets'),iReps=header.indexOf('reps'),iNote=header.indexOf('note');
+  if(iRoutine<0||iExId<0||iExName<0||iSets<0||iReps<0)return null;
+
+  function inferType(name){
+    const n=name.toLowerCase();
+    if(/push|chest|shoulder|tricep/.test(n)&&!/pull/.test(n))return'push';
+    if(/pull|back|row|lat |curl|bicep|deadlift|shrug|face pull/.test(n))return'pull';
+    if(/leg|squat|calf|quad|hamstring|glute/.test(n))return'legs';
+    return'other';
+  }
+
+  const routines={};
+  for(let i=1;i<lines.length;i++){
+    const f=parseLine(lines[i]);
+    if(f.length<5)continue;
+    const routineName=(f[iRoutine]||'').trim();if(!routineName)continue;
+    const exId=(f[iExId]||'').trim(),exName=(f[iExName]||'').trim();
+    if(!exId||!exName)continue;
+    const sets=parseInt(f[iSets])||3;
+    const repsRaw=(f[iReps]||'').trim();
+    const isRamp=/^ramp$/i.test(repsRaw);
+    const reps=isRamp?'8/8/3/1/1/1/5':(repsRaw||'8-12');
+    const note=iNote>=0?(f[iNote]||'').trim():'';
+    if(!routines[routineName])routines[routineName]={note:'',exercises:[],wtype:inferType(routineName)};
+    if(note)routines[routineName].note=note;
+    routines[routineName].exercises.push({id:exId,name:exName,sets,reps});
+  }
+  return Object.keys(routines).length?routines:null;
+}
+
 function PPLTracker(){
   const[workouts,setWorkoutsRaw]=useState(()=>{
     const stored=loadLS('fitlog_workouts',null);
@@ -1562,6 +1600,7 @@ function PPLTracker(){
   const[volumeLogged,setVolumeLogged]=useState(0);
   const[importResult,setImportResult]=useState(null);
   const[pendingImport,setPendingImport]=useState(null); // {parsed, stats}
+  const[pendingRoutineImport,setPendingRoutineImport]=useState(null); // {preview}
   const[showPrograms,setShowPrograms]=useState(false);
   const[midWorkoutAddEx,setMidWorkoutAddEx]=useState(false);
   const[saveAsNewRoutine,setSaveAsNewRoutine]=useState(false);
@@ -1695,14 +1734,45 @@ function PPLTracker(){
     reader.onload=ev=>{
       const text=ev.target.result;
       try{const data=JSON.parse(text);if(data.exercises)setWorkouts({...workouts,['custom_'+Date.now()]:data});else setWorkouts({...workouts,...data});setImportResult({type:'json',message:'FitLog routine imported.'});return;}catch{}
+
+      // Try custom FitLog routine CSV format (routine,exercise_id,exercise_name,sets,reps,note)
+      const fitlogRoutines=parseFitLogRoutineCSV(text);
+      if(fitlogRoutines){
+        const preview=Object.entries(fitlogRoutines).map(([label,r])=>{
+          const existingKey=Object.entries(workouts).find(([k,w])=>w.label.toLowerCase()===label.toLowerCase())?.[0];
+          return{label,note:r.note,wtype:r.wtype,exercises:r.exercises,existingKey,willUpdate:!!existingKey};
+        });
+        setPendingRoutineImport({preview});
+        return;
+      }
+
       const parsed=parseStrongCSV(text);
       if(!parsed){setImportResult({type:'error',message:'Unrecognised file format.'});return;}
-      // Show confirmation dialog instead of importing immediately
       const newRoutines=Object.keys(parsed.workouts).filter(k=>!PROTECTED_KEYS.has(k)&&!workouts[k]).length;
       const newSets=Object.values(parsed.logs).reduce((t,e)=>t+e.length,0);
       setPendingImport({parsed,newRoutines,newSets,newExercises:parsed.stats.totalExercises});
     };
     reader.readAsText(file);e.target.value='';
+  }
+
+  function confirmRoutineImport(){
+    if(!pendingRoutineImport)return;
+    const updated={...workouts};
+    let created=0,updatedCount=0;
+    pendingRoutineImport.preview.forEach(r=>{
+      if(r.existingKey){
+        if(PROTECTED_KEYS.has(r.existingKey))return; // never touch protected routines
+        updated[r.existingKey]={...updated[r.existingKey],note:r.note||updated[r.existingKey].note,exercises:r.exercises};
+        updatedCount++;
+      } else {
+        const key='custom_'+r.label.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')+'_'+Date.now();
+        updated[key]={label:r.label,tag:'Custom',category:r.wtype==='other'?'pull':r.wtype,gym:'anthropic',wtype:r.wtype,note:r.note||'',exercises:r.exercises};
+        created++;
+      }
+    });
+    setWorkouts(updated);
+    setImportResult({type:'strong',message:'Imported '+created+' new routine(s), updated '+updatedCount+' existing routine(s).'});
+    setPendingRoutineImport(null);
   }
 
   const workout=workouts[wKey];
@@ -1938,6 +2008,21 @@ function PPLTracker(){
 
     tab==='settings'&&React.createElement('div',{style:{padding:'20px 16px'}},
       React.createElement('div',{style:{fontSize:20,fontWeight:700,color:T.text,marginBottom:20}},'Settings'),
+      pendingRoutineImport&&React.createElement('div',{style:{marginBottom:16,padding:'16px',borderRadius:12,background:'rgba(20,184,166,0.1)',border:'1px solid rgba(20,184,166,0.3)'}},
+        React.createElement('div',{style:{fontSize:14,fontWeight:700,color:T.text,marginBottom:4}},'Import Routine CSV'),
+        React.createElement('div',{style:{fontSize:12,color:T.muted,marginBottom:14}},pendingRoutineImport.preview.length+' routines detected'),
+        React.createElement('div',{style:{maxHeight:220,overflowY:'auto',marginBottom:14}},
+          pendingRoutineImport.preview.map((r,i)=>React.createElement('div',{key:i,style:{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',marginBottom:6,background:T.bg3,borderRadius:8}},
+            React.createElement('div',{style:{flex:1,fontSize:13,color:T.text,fontWeight:600}},r.label),
+            React.createElement('div',{style:{fontSize:11,color:T.dim}},r.exercises.length+' ex'),
+            React.createElement('div',{style:{fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:5,color:r.willUpdate?'#fbbf24':'#5eead4',background:r.willUpdate?'rgba(251,191,36,0.15)':'rgba(20,184,166,0.15)'}},r.willUpdate?'UPDATE':'NEW')
+          ))
+        ),
+        React.createElement('div',{style:{display:'flex',gap:10}},
+          React.createElement('button',{onClick:()=>setPendingRoutineImport(null),style:{flex:1,padding:11,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:13,cursor:'pointer'}},'Cancel'),
+          React.createElement('button',{onClick:confirmRoutineImport,style:{flex:2,padding:11,borderRadius:9,border:'none',background:GRAD.button,color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer'}},'Import Routines')
+        )
+      ),
       pendingImport&&React.createElement('div',{style:{marginBottom:16,padding:'16px',borderRadius:12,background:'rgba(124,58,237,0.1)',border:'1px solid rgba(124,58,237,0.3)'}},
         React.createElement('div',{style:{fontSize:14,fontWeight:700,color:T.text,marginBottom:4}},'Import from Strong'),
         React.createElement('div',{style:{fontSize:12,color:T.muted,marginBottom:14}},
