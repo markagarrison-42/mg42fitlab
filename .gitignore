@@ -1,0 +1,5 @@
+fitlog.db
+*.swp
+__pycache__/
+instance/
+*.pyc
