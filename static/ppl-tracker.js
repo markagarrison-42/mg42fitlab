@@ -837,8 +837,13 @@ function HistoryView({allLogs,workouts,onUpdateLog,onDeleteSet,onDeleteSession,o
     )
   );
 }
-function RoutineEditor({workout,workoutKey,allLogs,onSave,onClose}){
-  const[draft,setDraft]=useState(JSON.parse(JSON.stringify(workout)));
+function RoutineEditor({workout,workoutKey,workouts,allLogs,onSave,onClose}){
+  if(!workout){
+    // Defensive guard: routine no longer exists (deleted/renamed elsewhere) — bail out instead of crashing
+    React.useEffect(()=>{onClose();},[]);
+    return null;
+  }
+  const[draft,setDraft]=useState(()=>JSON.parse(JSON.stringify(workout)));
   const[addingEx,setAddingEx]=useState(false);
   const[newExId,setNewExId]=useState('');
   const[newExName,setNewExName]=useState('');
@@ -992,7 +997,7 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
     {id:'upper',label:'Upper',color:TYPE_COLORS.upper,bg:TYPE_COLORS.upper+'20'},{id:'full',label:'Full Body',color:TYPE_COLORS.full,bg:TYPE_COLORS.full+'20'},{id:'core',label:'Core',color:TYPE_COLORS.core,bg:TYPE_COLORS.core+'20'},{id:'other',label:'Other',color:TYPE_COLORS.other,bg:TYPE_COLORS.other+'20'},
   ];
   if(editingRoutine)return React.createElement(RoutineEditor,{
-    workout:workouts[editingRoutine],workoutKey:editingRoutine,allLogs,
+    workout:workouts[editingRoutine],workoutKey:editingRoutine,workouts,allLogs,
     onSave:(key,draft)=>{onSaveRoutine(key,draft);setEditingRoutine(null);},
     onClose:()=>setEditingRoutine(null)
   });
