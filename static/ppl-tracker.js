@@ -537,7 +537,7 @@ function ScheduleEditor({schedule,workouts,onSave,onCancel}){
       )),
       React.createElement('div',{style:{display:'flex',gap:10,marginTop:20}},
         React.createElement('button',{onClick:onCancel,style:{flex:1,padding:13,borderRadius:10,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:14,cursor:'pointer',minHeight:48}},'Cancel'),
-        React.createElement('button',{onClick:()=>onSave({...draft,_default:Math.max(1,parseInt(draft._default)||120)}),style:{flex:2,padding:13,borderRadius:10,border:'none',background:GRAD.button,color:'#fff',fontWeight:700,cursor:'pointer',minHeight:48,boxShadow:'0 8px 24px rgba(124,58,237,0.3)'}},'Save')
+        React.createElement('button',{onClick:()=>onSave(draft),style:{flex:2,padding:13,borderRadius:10,border:'none',background:GRAD.button,color:'#fff',fontWeight:700,cursor:'pointer',minHeight:48,boxShadow:'0 8px 24px rgba(124,58,237,0.3)'}},'Save')
       )
     )
   );
