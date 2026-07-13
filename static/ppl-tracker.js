@@ -1565,15 +1565,32 @@ function ExerciseDatabase({workouts,restDefaults,onSaveRestDefaults,onSaveExerci
   );
 }
 
-function ActiveExBlock({ex,allLogs,setAllLogs,workout,restDefaults,handleSetLogged,handlePR,setSetsLogged,setVolumeLogged,restLabel,onMenu}){
+function ActiveExBlock({wKey,ex,allLogs,setAllLogs,workout,restDefaults,handleSetLogged,handlePR,setSetsLogged,setVolumeLogged,restLabel,onMenu}){
   const prevLogs=allLogs[ex.id]||[];
   const bestE1rm=getBestE1rm(prevLogs);
   const lastSession=prevLogs.slice(-ex.sets);
-  const[setData,setSetData]=useState(()=>Array.from({length:ex.sets},()=>({weight:'',reps:'',done:false,isPR:false})));
+  const draftKey='fitlog_draft_'+wKey+'_'+ex.id;
+  const[setData,setSetData]=useState(()=>{
+    // Restore any in-progress (typed but not necessarily logged) set values from
+    // a previous instance of this screen — survives forced re-logins, accidental
+    // reloads, etc. Drafts older than 6 hours are treated as stale and ignored.
+    try{
+      const draft=loadLS(draftKey,null);
+      if(draft&&draft.savedAt&&(Date.now()-draft.savedAt)<6*60*60*1000&&Array.isArray(draft.setData)&&draft.setData.length===ex.sets){
+        return draft.setData;
+      }
+    }catch{}
+    return Array.from({length:ex.sets},()=>({weight:'',reps:'',done:false,isPR:false}));
+  });
   const[editingSet,setEditingSet]=useState(null);
   const completedCount=setData.filter(s=>s.done).length;
   const pct=ex.sets>0?Math.round((completedCount/ex.sets)*100):0;
   const accent2=CAT[workout.category]||'#06b6d4';
+  useEffect(()=>{
+    // Autosave the draft on every change so nothing typed is ever lost, even if
+    // the app gets forcibly remounted (e.g. an auth hiccup) before a set is logged.
+    try{saveLS(draftKey,{setData,savedAt:Date.now()});}catch{}
+  },[setData]);
   function updateSet(i,field,val){setSetData(d=>d.map((s,idx)=>idx===i?{...s,[field]:val}:s));}
   function logSet(i){
     const s=setData[i];const w=parseFloat(s.weight),r=parseInt(s.reps);if(!w||!r)return;
@@ -1627,7 +1644,7 @@ function ActiveExBlock({ex,allLogs,setAllLogs,workout,restDefaults,handleSetLogg
             React.createElement('input',{type:'number',inputMode:'numeric',placeholder:prev?String(prev.reps):'reps',value:s.reps,onChange:e=>updateSet(i,'reps',e.target.value),disabled:s.done&&editingSet!==i,style:{width:60,padding:'9px 6px',background:s.done&&editingSet!==i?'transparent':T.bg3,border:'1px solid '+(s.done&&editingSet!==i?'transparent':editingSet===i?'#7c3aed':T.border2),borderRadius:8,color:s.done&&editingSet!==i?'#5eead4':T.text,fontSize:15,fontFamily:T.mono,textAlign:'center',minHeight:44}}),
             React.createElement('div',{style:{width:44,display:'flex',alignItems:'center',justifyContent:'center'}},
               s.done&&s.isPR?React.createElement('div',{style:{fontSize:16}},'🏆'):
-              React.createElement('button',{onClick:()=>()=>s.done?setEditingSet(editingSet===i?null:i):logSet(i),disabled:!s.done&&(!s.weight||!s.reps),style:{width:40,height:44,borderRadius:8,border:'none',background:s.done?(editingSet===i?'rgba(124,58,237,0.4)':'rgba(20,184,166,0.12)'):'rgba(124,58,237,0.4)',color:s.done?'#5eead4':'#c4b5fd',fontSize:18,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},s.done?'✓':'→')
+              React.createElement('button',{onClick:()=>{s.done?setEditingSet(editingSet===i?null:i):logSet(i);},disabled:!s.done&&(!s.weight||!s.reps),style:{width:40,height:44,borderRadius:8,border:'none',background:s.done?(editingSet===i?'rgba(124,58,237,0.4)':'rgba(20,184,166,0.12)'):'rgba(124,58,237,0.4)',color:s.done?'#5eead4':'#c4b5fd',fontSize:18,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},s.done?'✓':'→')
             )
           ),
           i<setData.length-1&&React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'3px 0',marginLeft:2}},
@@ -1829,6 +1846,15 @@ function PPLTracker(){
       if(data&&Array.isArray(data)&&data.length>0){
         setScheduleRaw(data);
         saveLS('fitlog_schedule',data);
+        // Now that the real schedule has loaded, re-sync wKey to today's
+        // scheduled workout — the initial guess at mount only had stale/empty
+        // localStorage to go on and may be wrong.
+        const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const today=days[new Date().getDay()];
+        const todayItem=data.find(x=>x.day===today);
+        if(todayItem&&todayItem.workoutKey){
+          setWKey(todayItem.workoutKey);
+        }
       } else {
         saveServerSchedule(DEFAULT_SCHEDULE);
       }
@@ -1870,7 +1896,12 @@ function PPLTracker(){
     workoutStartTimeRef.current=null;
     if(visHandlerRef.current){document.removeEventListener('visibilitychange',visHandlerRef.current);visHandlerRef.current=null;}
   }
-  function finishWorkout(){stopElapsedTimer();setActiveTimer(null);setActiveWorkout(false);setSummary({workout:workouts[wKey],duration:elapsedSec,prs,setsLogged,volumeLogged,allLogs,wKey});}
+  function clearWorkoutDrafts(){
+    getActiveExercises().forEach(ex=>{
+      try{localStorage.removeItem('fitlog_draft_'+wKey+'_'+ex.id);}catch{}
+    });
+  }
+  function finishWorkout(){stopElapsedTimer();setActiveTimer(null);setActiveWorkout(false);clearWorkoutDrafts();setSummary({workout:workouts[wKey],duration:elapsedSec,prs,setsLogged,volumeLogged,allLogs,wKey});}
   function handleSetLogged(exId,exName){
     const secs=getRestDuration(exId,restDefaults);
     setActiveTimer({exerciseId:exId,exerciseName:exName,seconds:secs});
@@ -2019,7 +2050,7 @@ function PPLTracker(){
         )
       ),
       React.createElement('div',{style:{padding:'10px 16px 4px',display:'flex',alignItems:'center',gap:8,background:T.bg}},
-        React.createElement('button',{onClick:()=>{stopElapsedTimer();setActiveWorkout(false);},style:{width:36,height:36,borderRadius:8,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:18,cursor:'pointer',WebkitTapHighlightColor:'transparent',lineHeight:1,flexShrink:0}},'<'),
+        React.createElement('button',{onClick:()=>{stopElapsedTimer();setActiveWorkout(false);clearWorkoutDrafts();},style:{width:36,height:36,borderRadius:8,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:18,cursor:'pointer',WebkitTapHighlightColor:'transparent',lineHeight:1,flexShrink:0}},'<'),
         React.createElement('div',{style:{flex:1,fontSize:15,fontWeight:600,color:T.text}},workout.label),
         React.createElement('div',{style:{fontFamily:T.mono,fontSize:12,color:T.muted}},setsLogged+' sets  '+fmtVol(volumeLogged)+'lb')
       ),
@@ -2032,7 +2063,7 @@ function PPLTracker(){
           )
         );
       })(),
-      React.createElement('div',null,getActiveExercises().map((ex,exIdx)=>React.createElement(ActiveExBlock,{key:wKey+'-'+ex.id+'-'+exIdx,ex,allLogs,setAllLogs,workout,restDefaults,handleSetLogged,handlePR,setSetsLogged,setVolumeLogged,restLabel,onMenu:(ex)=>setExMenu({ex,exIdx})}))),
+      React.createElement('div',null,getActiveExercises().map((ex,exIdx)=>React.createElement(ActiveExBlock,{key:wKey+'-'+ex.id+'-'+exIdx,wKey,ex,allLogs,setAllLogs,workout,restDefaults,handleSetLogged,handlePR,setSetsLogged,setVolumeLogged,restLabel,onMenu:(ex)=>setExMenu({ex,exIdx})}))),
       exMenu&&React.createElement(ExerciseMenu,{ex:exMenu.ex,exIdx:exMenu.exIdx,restDefaults,workouts,onAddSet:addSetToEx,onRemoveSet:removeSetFromEx,onDelete:deleteEx,onSwap:swapEx,onSetRest:setExRestTimer,onClose:()=>setExMenu(null)}),
       React.createElement('div',{style:{padding:'16px',display:'flex',flexDirection:'column',gap:10}},
         !midWorkoutAddEx?React.createElement('button',{onClick:()=>setMidWorkoutAddEx(true),style:{width:'100%',padding:16,borderRadius:12,border:'none',background:'rgba(59,130,246,0.15)',color:'#3b82f6',fontWeight:700,fontSize:16,cursor:'pointer',minHeight:54,WebkitTapHighlightColor:'transparent'}},'Add Exercises')
@@ -2126,11 +2157,11 @@ function PPLTracker(){
 
     tab==='workout'&&React.createElement(React.Fragment,null,
       React.createElement('div',{style:{position:'sticky',top:0,zIndex:10,backdropFilter:'blur(16px)',borderBottom:'1px solid '+T.border,padding:'0 16px',background:'linear-gradient(180deg,'+T.bg+'f8 0%,'+T.bg+'e0 100%)'}},
-        React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',paddingTop:16,paddingBottom:12}},
-          React.createElement('div',{style:{fontSize:22,fontWeight:800,background:GRAD.accent,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',letterSpacing:'-0.03em'}},'FitLog'),
-          React.createElement('button',{onClick:()=>supabase.auth.signOut(),style:{width:38,height:38,borderRadius:10,border:'1px solid '+T.border2,background:'rgba(255,255,255,0.03)',color:T.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,WebkitTapHighlightColor:'transparent'}},'\u238b')
+        React.createElement('div',{style:{position:'relative',display:'flex',alignItems:'center',justifyContent:'center',paddingTop:18,paddingBottom:14}},
+          React.createElement('div',{style:{fontSize:38,fontFamily:"'Anton',sans-serif",fontStyle:'normal',transform:'skewX(-8deg)',background:GRAD.accent,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',letterSpacing:'0.01em',textTransform:'uppercase'}},'FitLog'),
+          React.createElement('button',{onClick:()=>supabase.auth.signOut(),style:{position:'absolute',right:0,width:38,height:38,borderRadius:10,border:'1px solid '+T.border2,background:'rgba(255,255,255,0.03)',color:T.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,WebkitTapHighlightColor:'transparent'}},'\u238b')
         ),
-        React.createElement('div',{style:{display:'flex',gap:6,overflowX:'auto',paddingBottom:14,scrollbarWidth:'none'}},
+        React.createElement('div',{style:{display:'flex',flexWrap:'wrap',justifyContent:'center',gap:6,paddingBottom:14}},
           // Tab strip mirrors the current weekly schedule — unique workout keys, in day order (Sun-Sat), deduped
           (()=>{
             const dayOrder=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -2141,7 +2172,7 @@ function PPLTracker(){
             });
             return scheduleKeys.map(key=>{
               const w=workouts[key];const a=CAT[w.category];const active=wKey===key;
-              return React.createElement('button',{key,onClick:()=>setWKey(key),style:{flexShrink:0,padding:'9px 15px',borderRadius:9,border:'1px solid '+(active?a+'60':T.border2),background:active?'linear-gradient(135deg,'+a+'30,'+a+'10)':'rgba(255,255,255,0.03)',color:active?a:T.sub,fontSize:12,fontWeight:active?700:500,cursor:'pointer',fontFamily:T.sans,minHeight:40,WebkitTapHighlightColor:'transparent'}},w.label);
+              return React.createElement('button',{key,onClick:()=>setWKey(key),style:{flex:'0 1 calc(25% - 5px)',minWidth:70,padding:'9px 10px',borderRadius:9,border:'1px solid '+(active?a+'60':T.border2),background:active?'linear-gradient(135deg,'+a+'30,'+a+'10)':'rgba(255,255,255,0.03)',color:active?a:T.sub,fontSize:12,fontWeight:active?700:500,cursor:'pointer',fontFamily:T.sans,minHeight:40,WebkitTapHighlightColor:'transparent',textAlign:'center',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},w.label);
             });
           })()
         )
@@ -2323,7 +2354,7 @@ function AuthScreen({onAuthed}){
   return React.createElement('div',{style:{minHeight:'100vh',background:T.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,fontFamily:T.sans}},
     React.createElement('div',{style:{width:'100%',maxWidth:360}},
       React.createElement('div',{style:{textAlign:'center',marginBottom:32}},
-        React.createElement('div',{style:{fontSize:32,fontWeight:800,background:GRAD.accent,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',letterSpacing:'-0.03em'}},'FitLog'),
+        React.createElement('div',{style:{fontSize:42,fontFamily:"'Anton',sans-serif",transform:'skewX(-8deg)',background:GRAD.accent,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',letterSpacing:'0.01em',textTransform:'uppercase'}},'FitLog'),
         React.createElement('div',{style:{fontSize:13,color:T.muted,marginTop:6}},mode==='login'?'Welcome back':'Create your account')
       ),
       React.createElement('form',{onSubmit:handleSubmit},
@@ -2343,11 +2374,39 @@ function AuthScreen({onAuthed}){
 
 function AppRoot(){
   const[session,setSession]=useState(undefined); // undefined = loading, null = logged out, object = logged in
+  const hadSessionRef=useRef(false);
 
   useEffect(()=>{
-    supabase.auth.getSession().then(({data})=>setSession(data.session));
-    const{data:listener}=supabase.auth.onAuthStateChange((_event,newSession)=>{
-      setSession(newSession);
+    supabase.auth.getSession().then(({data})=>{
+      setSession(data.session);
+      if(data.session)hadSessionRef.current=true;
+    });
+
+    const{data:listener}=supabase.auth.onAuthStateChange((event,newSession)=>{
+      if(newSession){
+        hadSessionRef.current=true;
+        setSession(newSession);
+        return;
+      }
+      // newSession is null — could be a real sign-out, or a transient background
+      // token-refresh hiccup (e.g. brief network blip). If we previously had a
+      // valid session, don't nuke the whole app (and any in-progress workout)
+      // on the first failure — try once more before believing it.
+      if(hadSessionRef.current){
+        supabase.auth.refreshSession().then(({data,error})=>{
+          if(data.session){
+            setSession(data.session);
+          } else {
+            hadSessionRef.current=false;
+            setSession(null);
+          }
+        }).catch(()=>{
+          hadSessionRef.current=false;
+          setSession(null);
+        });
+      } else {
+        setSession(null);
+      }
     });
     return()=>listener.subscription.unsubscribe();
   },[]);
