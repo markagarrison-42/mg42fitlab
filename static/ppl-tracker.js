@@ -265,17 +265,12 @@ function getWeeklyVolume(allLogs,refDate,customBpOverride){
 // Weekly volume targets (sets/week) — from Anthropic PPL Hypertrophy Restructure v2
 const TARGET_VOLUME={Chest:[20,25],Back:[20,25],Shoulders:[20,25],Biceps:[20,25],Triceps:[20,25],Quads:[20,25],Hamstrings:[20,25],Glutes:[20,25],Calves:[20,25],Core:null};
 
-function WeeklyVolumeCard({allLogs}){
+function WeeklyVolumeCard({allLogs,customBp,setCustomBp}){
   const[collapsed,setCollapsed]=useState(false);
   const[expandedBp,setExpandedBp]=useState(null);
   const[editingEx,setEditingEx]=useState(null);
   // Store body part overrides in React state so changes immediately trigger re-render
-  const[customBp,setCustomBp]=useState(function(){return loadLS('fitlog_custom_bodypart',{});});
-  // Sync from localStorage on mount in case Supabase loaded after component mounted
-  useEffect(function(){
-    var stored=loadLS('fitlog_custom_bodypart',{});
-    if(Object.keys(stored).length>0){setCustomBp(stored);}
-  },[]);
+
   // tick forces re-read of localStorage overrides after saving a body part change
   var _vd=getWeeklyVolume(allLogs,new Date(),customBp);
   var byBodyPart=_vd.byBodyPart;
@@ -296,13 +291,11 @@ function WeeklyVolumeCard({allLogs}){
     return'#f87171';
   }
   function saveBp(exId,newBp){
-    setCustomBp(function(prev){
-      var next=Object.assign({},prev);
-      next[exId]=newBp;
-      saveLS('fitlog_custom_bodypart',next);
-      saveBodyPartOverrides(next);
-      return next;
-    });
+    var next=Object.assign({},customBp);
+    next[exId]=newBp;
+    saveLS('fitlog_custom_bodypart',next);
+    saveBodyPartOverrides(next);
+    setCustomBp(next);
     setEditingEx(null);
   }
 
@@ -1450,7 +1443,7 @@ function OverloadCard({allLogs,workouts}){
 }
 
 // ── DASHBOARD TAB ──────────────────────────────────────────────────────────────
-function DashboardTab({allLogs,workouts,schedule,restDefaults}){
+function DashboardTab({allLogs,workouts,schedule,restDefaults,customBp,setCustomBp}){
   const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const today=days[new Date().getDay()];
   const todayItem=schedule.find(s=>s.day===today);
@@ -1483,7 +1476,7 @@ function DashboardTab({allLogs,workouts,schedule,restDefaults}){
     ),
 
     // Weekly volume
-    React.createElement(WeeklyVolumeCard,{allLogs}),
+    React.createElement(WeeklyVolumeCard,{allLogs,customBp,setCustomBp}),
 
     // Progressive overload
     React.createElement(OverloadCard,{allLogs,workouts}),
@@ -1542,6 +1535,7 @@ function PPLTracker(){
   const[schedule,setScheduleRaw]=useState(()=>{const s=loadLS('fitlog_schedule',null);return Array.isArray(s)&&s.length>0?s:DEFAULT_SCHEDULE;});
   const[restDefaults,setRestDefaultsRaw]=useState(loadRestDefaults);
   const[allLogs,setAllLogs]=useState({});
+  const[customBp,setCustomBp]=useState(function(){return loadLS('fitlog_custom_bodypart',{});});
   const[tab,setTab]=useState('dashboard');
   const[editingSchedule,setEditingSchedule]=useState(false);
   const[editingSettings,setEditingSettings]=useState(false);
@@ -1582,14 +1576,14 @@ function PPLTracker(){
       var hasLocal=Object.keys(local).length>0;
       var hasRemote=data&&Object.keys(data).length>0;
       if(hasRemote){
-        // Merge remote into local (remote wins on conflict)
         var merged=Object.assign({},local,data);
         saveLS('fitlog_custom_bodypart',merged);
-        // Update WeeklyVolumeCard state is in that component, not here
-        // so just ensure localStorage is right for next render
+        setCustomBp(merged);
+        if(Object.keys(merged).length>Object.keys(data).length){
+          saveBodyPartOverrides(merged); // push any local-only ones up
+        }
       } else if(hasLocal){
-        // First time with Supabase — push existing local overrides up
-        saveBodyPartOverrides(local);
+        saveBodyPartOverrides(local); // first time — migrate local to Supabase
       }
     }).catch(function(){});
   },[]);
@@ -1729,7 +1723,7 @@ function PPLTracker(){
     ),
 
     // Tab content
-    tab==='dashboard'&&React.createElement(DashboardTab,{allLogs,workouts,schedule,restDefaults}),
+    tab==='dashboard'&&React.createElement(DashboardTab,{allLogs,workouts,schedule,restDefaults,customBp,setCustomBp}),
 
     tab==='history'&&React.createElement(HistoryView,{
       allLogs,workouts,
