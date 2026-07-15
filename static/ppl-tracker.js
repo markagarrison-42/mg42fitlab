@@ -55,6 +55,21 @@ async function saveServerSchedule(scheduleData){
     await supabase.from('fitlog_schedule').upsert({user_id:user.id,data:scheduleData,updated_at:new Date().toISOString()},{onConflict:'user_id'});
   }catch{}
 }
+async function fetchBodyPartOverrides(){
+  try{
+    const{data,error}=await supabase.from('fitlog_bodypart_overrides').select('data').maybeSingle();
+    if(error||!data)return null;
+    return data.data;
+  }catch{return null;}
+}
+async function saveBodyPartOverrides(overrides){
+  try{
+    const{data:{user}}=await supabase.auth.getUser();
+    if(!user)return;
+    await supabase.from('fitlog_bodypart_overrides').upsert({user_id:user.id,data:overrides,updated_at:new Date().toISOString()},{onConflict:'user_id'});
+  }catch{}
+}
+
 async function fetchServerRestDefaults(){
   try{
     const{data,error}=await supabase.from('fitlog_rest_defaults').select('data').maybeSingle();
@@ -179,17 +194,22 @@ const PROTECTED_KEYS=new Set(['push_a','push_b','pull_a','pull_b','legs_a','legs
 
 function inferBodyPart(name){
   const n=name.toLowerCase();
-  if(/bench|chest|fly|pec|dip/.test(n))return'Chest';
-  if(/squat|leg press|lunge|quad/.test(n))return'Legs';
-  if(/curl|bicep/.test(n)&&!/leg curl|hamstring/.test(n))return'Biceps';
-  if(/tricep|pushdown|skullcrusher|overhead ext/.test(n))return'Triceps';
-  if(/row|pulldown|pull-?up|lat |deadlift/.test(n))return'Back';
-  if(/shoulder|lateral raise|arnold|delt|shrug|face pull/.test(n))return'Shoulders';
-  if(/calf/.test(n))return'Calves';
-  if(/ab |crunch|plank|russian twist|v up|side bend/.test(n))return'Core';
-  if(/glute|hip thrust|kickback/.test(n))return'Glutes';
-  if(/hamstring|leg curl|romanian/.test(n))return'Hamstrings';
-  return'Other';
+  if(/bench|chest|fly|pec|cable cross|cybex|incline press|decline press/.test(n)&&!/row/.test(n))return'Chest';
+  if(/row|pulldown|pull.?up|lat |chin.?up|seated row|cable row|t.bar|rack pull/.test(n)&&!/lateral raise/.test(n))return'Back';
+  if(/deadlift/.test(n)&&!/romanian|rdl|stiff/.test(n))return'Back';
+  if(/shoulder press|military|overhead press|arnold|lateral raise|front raise|delt|face pull|upright row/.test(n))return'Shoulders';
+  if(/shrug/.test(n))return'Shoulders';
+  if(/(bicep|biceps) curl|hammer curl|incline curl|concentration curl|preacher|waiter curl|overhead curl|cable curl/.test(n))return'Biceps';
+  if(/curl/.test(n)&&!/leg curl|nordic|hamstring|wrist/.test(n))return'Biceps';
+  if(/tricep|pushdown|pull.?down.*tri|skullcrusher|skull crusher|tate press|dip/.test(n)&&!/lat pulldown|chin/.test(n))return'Triceps';
+  if(/squat|leg press|hack squat|lunge|split squat|step.?up|quad|leg ext/.test(n)&&!/nordic|curl/.test(n))return'Quads';
+  if(/romanian|rdl|stiff.?leg|leg curl|nordic|hamstring|glute.?ham/.test(n))return'Hamstrings';
+  if(/glute|hip thrust|kickback|abduction|fire hydrant/.test(n))return'Glutes';
+  if(/calf|calves|calf press|seated calf|standing calf|tibialis/.test(n))return'Calves';
+  if(/ab |crunch|plank|russian twist|v.?up|side bend|core|oblique|cable crunch/.test(n))return'Core';
+  if(/ghd/.test(n))return'Hamstrings';
+  if(/bulgarian/.test(n))return'Quads';
+  return'Quads'; // fallback for leg exercises
 }
 function inferEquipment(name){
   const n=name.toLowerCase();
@@ -218,7 +238,7 @@ function getWeekRange(date){
 }
 
 // Compute total sets performed per body part within the week containing `refDate`
-function getWeeklyVolume(allLogs,refDate){
+function getWeeklyVolume(allLogs,refDate,customBpOverride){
   const{start,end}=getWeekRange(refDate||new Date());
   const byBodyPart={};
   const byExercise={};
@@ -231,8 +251,10 @@ function getWeeklyVolume(allLogs,refDate){
       if(t>=start&&t<end){if(!exName)exName=e.exName||null;weekSets++;}
     });
     if(!weekSets)return;
-    var name=exName||exId.replace(/_/g,' ');
-    var bp=getBodyPart(exId,name);
+    var rawName=exName||exId.replace(/_/g,' ');
+    var name=rawName.replace(/\b\w/g,function(ch){return ch.toUpperCase();});
+    var _custom=customBpOverride||loadLS('fitlog_custom_bodypart',{});
+    var bp=_custom[exId]||inferBodyPart(name);
     byBodyPart[bp]=(byBodyPart[bp]||0)+weekSets;
     if(!byExercise[bp])byExercise[bp]=[];
     byExercise[bp].push({exId:exId,name:name,sets:weekSets});
@@ -241,22 +263,29 @@ function getWeeklyVolume(allLogs,refDate){
 }
 
 // Weekly volume targets (sets/week) — from Anthropic PPL Hypertrophy Restructure v2
-const TARGET_VOLUME={Chest:[20,25],Shoulders:[20,25],Triceps:[20,25],Back:[20,25],Biceps:[20,25],Legs:[20,25],Hamstrings:[20,25],Glutes:[20,25],Calves:[20,25],Core:null,Other:null};
+const TARGET_VOLUME={Chest:[20,25],Back:[20,25],Shoulders:[20,25],Biceps:[20,25],Triceps:[20,25],Quads:[20,25],Hamstrings:[20,25],Glutes:[20,25],Calves:[20,25],Core:null};
 
 function WeeklyVolumeCard({allLogs}){
   const[collapsed,setCollapsed]=useState(false);
   const[expandedBp,setExpandedBp]=useState(null);
   const[editingEx,setEditingEx]=useState(null);
-  const[tick,setTick]=useState(0);
-  var vd=getWeeklyVolume(allLogs,new Date());
-  var byBodyPart=vd.byBodyPart;
-  var byExercise=vd.byExercise;
-  const bodyPartOrder=['Chest','Back','Shoulders','Biceps','Triceps','Legs','Hamstrings','Glutes','Calves','Core','Other'];
+  // Store body part overrides in React state so changes immediately trigger re-render
+  const[customBp,setCustomBp]=useState(function(){return loadLS('fitlog_custom_bodypart',{});});
+  // Sync from localStorage on mount in case Supabase loaded after component mounted
+  useEffect(function(){
+    var stored=loadLS('fitlog_custom_bodypart',{});
+    if(Object.keys(stored).length>0){setCustomBp(stored);}
+  },[]);
+  // tick forces re-read of localStorage overrides after saving a body part change
+  var _vd=getWeeklyVolume(allLogs,new Date(),customBp);
+  var byBodyPart=_vd.byBodyPart;
+  var byExercise=_vd.byExercise;
+  const bodyPartOrder=['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes','Calves','Core'];
   const entries=bodyPartOrder.filter(function(bp){return byBodyPart[bp]||TARGET_VOLUME[bp];});
   const{start,end}=getWeekRange(new Date());
   const endDisplay=new Date(end.getTime()-1);
   const rangeLabel=start.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' \u2013 '+endDisplay.toLocaleDateString('en-US',{month:'short',day:'numeric'});
-  const BPOPTS=['Chest','Back','Shoulders','Biceps','Triceps','Legs','Hamstrings','Glutes','Calves','Core','Other'];
+  const BPOPTS=['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes','Calves','Core'];
   if(!entries.length)return null;
 
   function statusColor(count,target){
@@ -267,11 +296,14 @@ function WeeklyVolumeCard({allLogs}){
     return'#f87171';
   }
   function saveBp(exId,newBp){
-    var stored=loadLS('fitlog_custom_bodypart',{});
-    stored[exId]=newBp;
-    saveLS('fitlog_custom_bodypart',stored);
+    setCustomBp(function(prev){
+      var next=Object.assign({},prev);
+      next[exId]=newBp;
+      saveLS('fitlog_custom_bodypart',next);
+      saveBodyPartOverrides(next);
+      return next;
+    });
     setEditingEx(null);
-    setTick(function(n){return n+1;});
   }
 
   if(editingEx){
@@ -1187,7 +1219,7 @@ function ExerciseDatabase({workouts,restDefaults,onSaveRestDefaults,onSaveExerci
         React.createElement('div',{style:{flex:1}},
           React.createElement('label',{style:{fontSize:12,color:T.sub,fontWeight:600,display:'block',marginBottom:6}},'Body Part'),
           React.createElement('select',{value:newDraft.bodyPart,onChange:e=>setNewDraft(d=>({...d,bodyPart:e.target.value})),style:{width:'100%',padding:'11px 12px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:8,color:T.text,fontSize:14,fontFamily:T.mono,minHeight:46}},
-            ['Chest','Back','Shoulders','Biceps','Triceps','Legs','Hamstrings','Glutes','Calves','Core','Other'].map(bp=>React.createElement('option',{key:bp,value:bp},bp))
+            ['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes','Calves','Core'].map(bp=>React.createElement('option',{key:bp,value:bp},bp))
           )
         ),
         React.createElement('div',{style:{flex:1}},
@@ -1241,7 +1273,7 @@ function ExerciseDatabase({workouts,restDefaults,onSaveRestDefaults,onSaveExerci
         React.createElement('div',{style:{flex:1}},
           React.createElement('label',{style:{fontSize:12,color:T.sub,fontWeight:600,display:'block',marginBottom:6}},'Body Part'),
           React.createElement('select',{value:editDraft.bodyPart,onChange:e=>setEditDraft(d=>({...d,bodyPart:e.target.value})),style:{width:'100%',padding:'11px 12px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:8,color:T.text,fontSize:14,fontFamily:T.mono,minHeight:46}},
-            ['Chest','Back','Shoulders','Biceps','Triceps','Legs','Hamstrings','Glutes','Calves','Core','Other'].map(bp=>React.createElement('option',{key:bp,value:bp},bp))
+            ['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes','Calves','Core'].map(bp=>React.createElement('option',{key:bp,value:bp},bp))
           )
         ),
         React.createElement('div',{style:{flex:1}},
@@ -1544,6 +1576,22 @@ function PPLTracker(){
         setRestDefaultsRaw(data);saveLS('fitlog_rest_defaults',data);
       }else{saveServerRestDefaults(restDefaults);}
     }).catch(()=>{});
+
+    fetchBodyPartOverrides().then(function(data){
+      var local=loadLS('fitlog_custom_bodypart',{});
+      var hasLocal=Object.keys(local).length>0;
+      var hasRemote=data&&Object.keys(data).length>0;
+      if(hasRemote){
+        // Merge remote into local (remote wins on conflict)
+        var merged=Object.assign({},local,data);
+        saveLS('fitlog_custom_bodypart',merged);
+        // Update WeeklyVolumeCard state is in that component, not here
+        // so just ensure localStorage is right for next render
+      } else if(hasLocal){
+        // First time with Supabase — push existing local overrides up
+        saveBodyPartOverrides(local);
+      }
+    }).catch(function(){});
   },[]);
 
   function setWorkouts(w){setWorkoutsRaw(w);saveLS('fitlog_workouts',w);saveServerWorkouts(w);}
