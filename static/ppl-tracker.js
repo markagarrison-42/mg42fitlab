@@ -221,16 +221,23 @@ function getWeekRange(date){
 function getWeeklyVolume(allLogs,refDate){
   const{start,end}=getWeekRange(refDate||new Date());
   const byBodyPart={};
-  Object.entries(allLogs).forEach(([exId,entries])=>{
-    entries.forEach(entry=>{
-      const t=new Date(entry.date);
-      if(t>=start&&t<end){
-        const bp=getBodyPart(exId,entry.exName||exId.replace(/_/g,' '));
-        byBodyPart[bp]=(byBodyPart[bp]||0)+1;
-      }
+  const byExercise={};
+  Object.entries(allLogs).forEach(function(kv){
+    var exId=kv[0];var entries=kv[1];
+    if(!entries||!entries.length)return;
+    var exName=null;var weekSets=0;
+    entries.forEach(function(e){
+      var t=new Date(e.date);
+      if(t>=start&&t<end){if(!exName)exName=e.exName||null;weekSets++;}
     });
+    if(!weekSets)return;
+    var name=exName||exId.replace(/_/g,' ');
+    var bp=getBodyPart(exId,name);
+    byBodyPart[bp]=(byBodyPart[bp]||0)+weekSets;
+    if(!byExercise[bp])byExercise[bp]=[];
+    byExercise[bp].push({exId:exId,name:name,sets:weekSets});
   });
-  return byBodyPart;
+  return{byBodyPart:byBodyPart,byExercise:byExercise};
 }
 
 // Weekly volume targets (sets/week) — from Anthropic PPL Hypertrophy Restructure v2
@@ -238,51 +245,100 @@ const TARGET_VOLUME={Chest:[20,25],Shoulders:[20,25],Triceps:[20,25],Back:[20,25
 
 function WeeklyVolumeCard({allLogs}){
   const[collapsed,setCollapsed]=useState(false);
-  const weeklyVolume=getWeeklyVolume(allLogs,new Date());
+  const[expandedBp,setExpandedBp]=useState(null);
+  const[editingEx,setEditingEx]=useState(null);
+  const[tick,setTick]=useState(0);
+  var vd=getWeeklyVolume(allLogs,new Date());
+  var byBodyPart=vd.byBodyPart;
+  var byExercise=vd.byExercise;
   const bodyPartOrder=['Chest','Back','Shoulders','Biceps','Triceps','Legs','Hamstrings','Glutes','Calves','Core','Other'];
-  const entries=bodyPartOrder.filter(bp=>weeklyVolume[bp]||TARGET_VOLUME[bp]);
+  const entries=bodyPartOrder.filter(function(bp){return byBodyPart[bp]||TARGET_VOLUME[bp];});
   const{start,end}=getWeekRange(new Date());
   const endDisplay=new Date(end.getTime()-1);
-  const rangeLabel=start.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' – '+endDisplay.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  const rangeLabel=start.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' \u2013 '+endDisplay.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  const BPOPTS=['Chest','Back','Shoulders','Biceps','Triceps','Legs','Hamstrings','Glutes','Calves','Core','Other'];
   if(!entries.length)return null;
 
   function statusColor(count,target){
     if(!target)return T.muted;
-    const[lo,hi]=target;
+    var lo=target[0],hi=target[1];
     if(count>=lo&&count<=hi)return'#34d399';
     if(count<lo)return'#fbbf24';
     return'#f87171';
   }
+  function saveBp(exId,newBp){
+    var stored=loadLS('fitlog_custom_bodypart',{});
+    stored[exId]=newBp;
+    saveLS('fitlog_custom_bodypart',stored);
+    setEditingEx(null);
+    setTick(function(n){return n+1;});
+  }
+
+  if(editingEx){
+    return React.createElement('div',{style:{position:'fixed',inset:0,zIndex:500,background:'rgba(0,0,0,0.85)',display:'flex',alignItems:'flex-end'},onClick:function(){setEditingEx(null);}},
+      React.createElement('div',{onClick:function(e){e.stopPropagation();},style:{width:'100%',background:T.bg2,borderRadius:'16px 16px 0 0',padding:'20px 16px 44px',border:'1px solid '+T.border}},
+        React.createElement('div',{style:{fontSize:14,fontWeight:700,color:T.text,marginBottom:2}},editingEx.name),
+        React.createElement('div',{style:{fontSize:11,color:T.dim,marginBottom:16}},'Currently: '+editingEx.currentBp),
+        React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:8}},
+          BPOPTS.map(function(bp){
+            var active=bp===editingEx.currentBp;
+            return React.createElement('button',{key:bp,onClick:function(){saveBp(editingEx.exId,bp);},style:{padding:'8px 14px',borderRadius:8,border:'1px solid '+(active?'rgba(124,58,237,0.5)':T.border2),background:active?'rgba(124,58,237,0.2)':'transparent',color:active?'#a78bfa':T.sub,fontSize:13,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},bp);
+          })
+        )
+      )
+    );
+  }
 
   return React.createElement('div',{style:{margin:'0 16px 4px',background:T.bg2,borderRadius:14,border:'1px solid '+T.border,overflow:'hidden'}},
-    React.createElement('div',{onClick:()=>setCollapsed(c=>!c),style:{padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},
-      React.createElement('div',{style:{fontSize:16}},'📊'),
+    React.createElement('div',{onClick:function(){setCollapsed(function(v){return !v;});},style:{padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},
+      React.createElement('div',{style:{fontSize:16}},'\uD83D\uDCCA'),
       React.createElement('div',{style:{flex:1}},
         React.createElement('div',{style:{fontSize:13,fontWeight:700,color:T.text}},'Weekly Volume'),
         React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1}},rangeLabel)
       ),
-      React.createElement('div',{style:{fontSize:13,color:T.dim}},collapsed?'⌄':'⌃')
+      React.createElement('div',{style:{fontSize:13,color:T.dim}},collapsed?'\u2304':'\u2303')
     ),
     !collapsed&&React.createElement('div',{style:{padding:'0 16px 14px'}},
-      entries.map(bp=>{
-        const count=weeklyVolume[bp]||0;
-        const target=TARGET_VOLUME[bp];
-        const color=statusColor(count,target);
-        const pct=target?Math.min(100,Math.round((count/target[1])*100)):0;
+      entries.map(function(bp){
+        var count=byBodyPart[bp]||0;
+        var target=TARGET_VOLUME[bp];
+        var color=statusColor(count,target);
+        var pct=target?Math.min(100,Math.round((count/target[1])*100)):0;
+        var isExpanded=expandedBp===bp;
+        var exercises=(byExercise[bp]||[]).slice().sort(function(a,b){return b.sets-a.sets;});
         return React.createElement('div',{key:bp,style:{marginBottom:8}},
-          React.createElement('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:3}},
-            React.createElement('div',{style:{fontSize:12,color:T.sub}},bp),
+          React.createElement('div',{
+            onClick:function(){setExpandedBp(function(prev){return prev===bp?null:bp;});},
+            style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3,cursor:exercises.length?'pointer':'default',WebkitTapHighlightColor:'transparent'}
+          },
+            React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6}},
+              React.createElement('div',{style:{fontSize:12,color:T.sub}},bp),
+              exercises.length>0&&React.createElement('div',{style:{fontSize:9,color:T.dim}},isExpanded?'\u25b2':'\u25bc')
+            ),
             React.createElement('div',{style:{fontSize:12,fontFamily:T.mono,fontWeight:700,color}},count+(target?'/'+target[0]+'-'+target[1]:''))
           ),
-          target&&React.createElement('div',{style:{height:4,borderRadius:2,background:'rgba(148,163,184,0.12)',overflow:'hidden'}},
+          target&&React.createElement('div',{style:{height:4,borderRadius:2,background:'rgba(148,163,184,0.12)',overflow:'hidden',marginBottom:isExpanded&&exercises.length?6:0}},
             React.createElement('div',{style:{height:'100%',width:pct+'%',background:color,borderRadius:2,transition:'width 0.4s ease'}})
+          ),
+          isExpanded&&exercises.length>0&&React.createElement('div',{style:{background:T.bg3,borderRadius:8,padding:'4px 8px',marginBottom:2}},
+            exercises.map(function(ex,i){
+              return React.createElement('div',{key:ex.exId,style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderBottom:i<exercises.length-1?'1px solid '+T.border:'none'}},
+                React.createElement('div',{style:{flex:1,minWidth:0,fontSize:12,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',marginRight:8}},ex.name),
+                React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,flexShrink:0}},
+                  React.createElement('div',{style:{fontSize:11,color:T.dim,fontFamily:T.mono}},ex.sets+' sets'),
+                  React.createElement('button',{
+                    onClick:function(e){e.stopPropagation();setEditingEx({exId:ex.exId,name:ex.name,currentBp:bp});},
+                    style:{fontSize:10,padding:'2px 8px',borderRadius:5,border:'1px solid '+T.border2,background:'transparent',color:T.dim,cursor:'pointer',WebkitTapHighlightColor:'transparent'}
+                  },'edit')
+                )
+              );
+            })
           )
         );
       })
     )
   );
 }
-
 function buildSessions(allLogs,workouts){
   const customNames=loadLS('fitlog_custom_ex_names',{});
   const all=[];
