@@ -917,7 +917,7 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
   const grouped={};Object.entries(workouts).forEach(([key,w])=>{if(w.archived)return;const gym=w.gym||'general';if(!grouped[gym])grouped[gym]=[];grouped[gym].push({key,...w});});
   const GYM_ORDER=['pm','anthropic','rrb','golds','anytime','pf','general','home','hotel','rahway'];
   const gyms=Object.keys(grouped).sort((a,b)=>{const ai=GYM_ORDER.indexOf(a),bi=GYM_ORDER.indexOf(b);return(ai<0?99:ai)-(bi<0?99:bi);});
-  function sortedList(gym,list){const order=routineOrder[gym]||[];return [...list].sort((a,b)=>{const ai=order.indexOf(a.key),bi=order.indexOf(b.key);if(ai<0&&bi<0)return a.label.localeCompare(b.label);if(ai<0)return 1;if(bi<0)return -1;return ai-bi;});}
+  function sortedList(gym,list){const order=routineOrder[gym]||[];return [...list].sort((a,b)=>{const ai=order.indexOf(a.key),bi=order.indexOf(b.key);if(ai<0&&bi<0)return (a.label||'').localeCompare(b.label||'');if(ai<0)return 1;if(bi<0)return -1;return ai-bi;});}
   const filtered=(list)=>list.filter(w=>{
     const matchSearch=!search||w.label.toLowerCase().includes(search.toLowerCase());
     let matchFilter=true;
