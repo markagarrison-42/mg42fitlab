@@ -1695,7 +1695,7 @@ function PPLTracker(){
     reader.readAsText(file);e.target.value='';
   }
 
-  if(editingSchedule)return React.createElement(ScheduleEditor,{schedule,onSave:(s)=>{setSchedule(s);setEditingSchedule(false);},onClose:()=>setEditingSchedule(false)});
+  if(editingSchedule)return React.createElement(ScheduleEditor,{schedule,workouts,onSave:(s)=>{setSchedule(s);setEditingSchedule(false);},onCancel:()=>setEditingSchedule(false)});
   if(editingSettings)return React.createElement(SettingsModal,{restDefaults,schedule,workouts,allLogs,onSave:(d)=>{setRestDefaults(d);setEditingSettings(false);},onCancel:()=>setEditingSettings(false)});
 
   const accent='#7c3aed';
