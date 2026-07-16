@@ -1027,7 +1027,7 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
               const isSelected=selected.has(w.key);
               return React.createElement('div',{
                 key:w.key,
-                onClick:()=>{if(archiving){setSelected(s=>{const n=new Set(s);n.has(w.key)?n.delete(w.key):n.add(w.key);return n;});}else{onStartWorkout(w.key);}},
+                onClick:()=>{if(archiving){setSelected(s=>{const n=new Set(s);n.has(w.key)?n.delete(w.key):n.add(w.key);return n;});}else{onStartWorkout&&onStartWorkout(w.key);}},
                 style:{position:'relative',background:T.bg2,borderRadius:12,border:'1px solid '+(isSelected?'#f87171':T.border),padding:'12px 12px 10px',cursor:'pointer',WebkitTapHighlightColor:'transparent',minHeight:118,display:'flex',flexDirection:'column'}
               },
                 React.createElement('div',{style:{width:3,height:16,borderRadius:2,background:tc,marginBottom:6}}),
@@ -1053,7 +1053,7 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
       React.createElement('div',{onClick:e=>e.stopPropagation(),style:{background:T.bg2,borderRadius:'20px 20px 0 0',padding:'8px 16px 40px'}},
         React.createElement('div',{style:{width:40,height:4,borderRadius:2,background:T.border2,margin:'8px auto 20px'}}),
         React.createElement('div',{style:{fontSize:14,fontWeight:700,color:T.text,marginBottom:16,textAlign:'center'}},actionSheetRoutine.label),
-        React.createElement('button',{onClick:()=>{onStartWorkout(actionSheet);setActionSheet(null);},style:{width:'100%',padding:'14px 16px',marginBottom:8,borderRadius:12,border:'none',background:GRAD.button,color:'#fff',fontSize:15,fontWeight:700,cursor:'pointer',WebkitTapHighlightColor:'transparent',textAlign:'left'}},'▶  Start Workout'),
+        React.createElement('button',{onClick:()=>{onStartWorkout&&onStartWorkout(actionSheet);setActionSheet(null);},style:{width:'100%',padding:'14px 16px',marginBottom:8,borderRadius:12,border:'none',background:GRAD.button,color:'#fff',fontSize:15,fontWeight:700,cursor:'pointer',WebkitTapHighlightColor:'transparent',textAlign:'left'}},'▶  Start Workout'),
         React.createElement('button',{onClick:()=>{setStrongFormat(actionSheet);setActionSheet(null);},style:{width:'100%',padding:'14px 16px',marginBottom:8,borderRadius:12,border:'none',background:'rgba(20,184,166,0.1)',color:'#5eead4',fontSize:15,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent',textAlign:'left'}},'Strong Format'),
         React.createElement('button',{onClick:()=>{setEditingRoutine(actionSheet);setActionSheet(null);},style:{width:'100%',padding:'14px 16px',marginBottom:8,borderRadius:12,border:'none',background:'rgba(124,58,237,0.15)',color:'#a78bfa',fontSize:15,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent',textAlign:'left'}},'Edit Routine'),
         React.createElement('button',{onClick:()=>{if(window.confirm('Archive '+actionSheetRoutine.label+'?')){onArchive(actionSheet);}setActionSheet(null);},style:{width:'100%',padding:'14px 16px',borderRadius:12,border:'none',background:'rgba(239,68,68,0.1)',color:'#f87171',fontSize:15,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent',textAlign:'left'}},'Archive Routine')
@@ -1736,11 +1736,10 @@ function PPLTracker(){
 
     tab==='routines'&&React.createElement(RoutinesTab,{
       workouts,allLogs,
+      onStartWorkout:null,
       onSaveRoutine:(key,draft)=>{setWorkouts({...workouts,[key]:draft});},
       onReorder:handleReorder,
       onArchive:handleArchive,
-      onUnarchive:handleUnarchive,
-      onCreateRoutine:(key,routine)=>{setWorkouts({...workouts,[key]:routine});},
     }),
 
     tab==='exercises'&&React.createElement(ExerciseDatabase,{
