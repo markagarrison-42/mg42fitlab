@@ -1684,14 +1684,17 @@ function PPLTracker(){
       const text=ev.target.result;
       try{const data=JSON.parse(text);if(data.exercises)setWorkouts({...workouts,['custom_'+Date.now()]:data});else setWorkouts({...workouts,...data});setImportResult({type:'json',message:'FitLog routine imported.'});return;}catch{}
       const fitlogRoutines=parseFitLogRoutineCSV(text);
+      console.log('fitlogRoutines result:',fitlogRoutines,'text length:',text.length,'first 100:',text.slice(0,100));
       if(fitlogRoutines){
         const preview=Object.entries(fitlogRoutines).map(([label,r])=>{
-          const existingEntry=Object.entries(workouts).find(([k,w])=>w.label.toLowerCase()===label.toLowerCase());
+          const existingEntry=Object.entries(workouts).find(([k,w])=>w.label&&w.label.toLowerCase()===label.toLowerCase());
           const existingKey=existingEntry?existingEntry[0]:null;
+          console.log('routine:',label,'existingKey:',existingKey,'exercises:',r.exercises.length);
           return{label,note:r.note,wtype:r.wtype,exercises:r.exercises,existingKey,willUpdate:!!existingKey};
         });
         setPendingRoutineImport({preview});return;
       }
+      console.log('parseFitLogRoutineCSV returned null/falsy');
       const parsed=parseStrongCSV(text);
       if(!parsed){setImportResult({type:'error',message:'Unrecognised file format.'});return;}
       const newRoutines=Object.keys(parsed.workouts).filter(k=>!PROTECTED_KEYS.has(k)&&!workouts[k]).length;
