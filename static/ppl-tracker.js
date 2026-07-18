@@ -209,6 +209,7 @@ function inferBodyPart(name){
   if(/ab |crunch|plank|russian twist|v.?up|side bend|core|oblique|cable crunch/.test(n))return'Core';
   if(/ghd/.test(n))return'Hamstrings';
   if(/bulgarian/.test(n))return'Quads';
+  if(/shrug|trap|neck|farmer/.test(n))return'Traps';
   return'Quads'; // fallback for leg exercises
 }
 function inferEquipment(name){
@@ -263,7 +264,7 @@ function getWeeklyVolume(allLogs,refDate,customBpOverride){
 }
 
 // Weekly volume targets (sets/week) — from Anthropic PPL Hypertrophy Restructure v2
-const TARGET_VOLUME={Chest:[22,26],Back:[25,29],Shoulders:[25,29],Biceps:[12,16],Triceps:[15,19],Quads:[19,23],Hamstrings:[14,18],Glutes:null,Calves:[12,16],Core:null};
+const TARGET_VOLUME={Chest:[22,26],Back:[25,29],Shoulders:[25,29],Biceps:[12,16],Triceps:[15,19],Quads:[19,23],Hamstrings:[14,18],Glutes:null,Calves:[12,16],Core:null,Traps:null};
 
 function WeeklyVolumeCard({allLogs,customBp,setCustomBp}){
   const[collapsed,setCollapsed]=useState(false);
@@ -275,12 +276,12 @@ function WeeklyVolumeCard({allLogs,customBp,setCustomBp}){
   var _vd=getWeeklyVolume(allLogs,new Date(),customBp);
   var byBodyPart=_vd.byBodyPart;
   var byExercise=_vd.byExercise;
-  const bodyPartOrder=['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes','Calves','Core'];
+  const bodyPartOrder=['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes','Calves','Core','Traps'];
   const entries=bodyPartOrder.filter(function(bp){return byBodyPart[bp]||TARGET_VOLUME[bp];});
   const{start,end}=getWeekRange(new Date());
   const endDisplay=new Date(end.getTime()-1);
   const rangeLabel=start.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' \u2013 '+endDisplay.toLocaleDateString('en-US',{month:'short',day:'numeric'});
-  const BPOPTS=['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes','Calves','Core'];
+  const BPOPTS=['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes','Calves','Core','Traps'];
   if(!entries.length)return null;
 
   function statusColor(count,target){
@@ -1211,7 +1212,7 @@ function ExerciseDatabase({workouts,restDefaults,onSaveRestDefaults,onSaveExerci
         React.createElement('div',{style:{flex:1}},
           React.createElement('label',{style:{fontSize:12,color:T.sub,fontWeight:600,display:'block',marginBottom:6}},'Body Part'),
           React.createElement('select',{value:newDraft.bodyPart,onChange:e=>setNewDraft(d=>({...d,bodyPart:e.target.value})),style:{width:'100%',padding:'11px 12px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:8,color:T.text,fontSize:14,fontFamily:T.mono,minHeight:46}},
-            ['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes','Calves','Core'].map(bp=>React.createElement('option',{key:bp,value:bp},bp))
+            ['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes','Calves','Core','Traps'].map(bp=>React.createElement('option',{key:bp,value:bp},bp))
           )
         ),
         React.createElement('div',{style:{flex:1}},
@@ -1265,7 +1266,7 @@ function ExerciseDatabase({workouts,restDefaults,onSaveRestDefaults,onSaveExerci
         React.createElement('div',{style:{flex:1}},
           React.createElement('label',{style:{fontSize:12,color:T.sub,fontWeight:600,display:'block',marginBottom:6}},'Body Part'),
           React.createElement('select',{value:editDraft.bodyPart,onChange:e=>setEditDraft(d=>({...d,bodyPart:e.target.value})),style:{width:'100%',padding:'11px 12px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:8,color:T.text,fontSize:14,fontFamily:T.mono,minHeight:46}},
-            ['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes','Calves','Core'].map(bp=>React.createElement('option',{key:bp,value:bp},bp))
+            ['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes','Calves','Core','Traps'].map(bp=>React.createElement('option',{key:bp,value:bp},bp))
           )
         ),
         React.createElement('div',{style:{flex:1}},
