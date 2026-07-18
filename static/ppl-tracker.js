@@ -278,7 +278,7 @@ function WeeklyVolumeCard({allLogs,customBp,setCustomBp}){
   var byBodyPart=_vd.byBodyPart;
   var byExercise=_vd.byExercise;
   const bodyPartOrder=['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes','Calves','Core','Traps'];
-  const entries=bodyPartOrder.filter(function(bp){return byBodyPart[bp]||TARGET_VOLUME[bp];});
+  const entries=bodyPartOrder.filter(function(bp){return byBodyPart[bp]||TARGET_VOLUME.hasOwnProperty(bp);});
   const{start,end}=getWeekRange(new Date());
   const endDisplay=new Date(end.getTime()-1);
   const rangeLabel=start.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' \u2013 '+endDisplay.toLocaleDateString('en-US',{month:'short',day:'numeric'});
