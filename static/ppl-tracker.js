@@ -277,7 +277,7 @@ function WeeklyVolumeCard({allLogs,customBp,setCustomBp}){
   var _vd=getWeeklyVolume(allLogs,new Date(),customBp);
   var byBodyPart=_vd.byBodyPart;
   var byExercise=_vd.byExercise;
-  const bodyPartOrder=['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes','Calves','Core','Traps'];
+  const bodyPartOrder=['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Calves','Glutes','Traps','Core'];
   const entries=bodyPartOrder.filter(function(bp){return byBodyPart[bp]||TARGET_VOLUME.hasOwnProperty(bp);});
   const{start,end}=getWeekRange(new Date());
   const endDisplay=new Date(end.getTime()-1);
@@ -910,6 +910,7 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
   const[search,setSearch]=useState('');
   const[editingRoutine,setEditingRoutine]=useState(null);
   const[strongFormat,setStrongFormat]=useState(null);
+  const[viewingRoutine,setViewingRoutine]=useState(null);
   const[archiving,setArchiving]=useState(false);
   const[selected,setSelected]=useState(new Set());const[filterType,setFilterType]=useState('all');
   const[expandedGym,setExpandedGym]=useState(null);const[reordering,setReordering]=useState(false);
@@ -936,11 +937,63 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
     const newOrder={...routineOrder,[gym]:keys};saveLS('fitlog_routine_order',newOrder);setRoutineOrder(newOrder);onReorder(newOrder);dragRef.current={gym,idx};
   }
   function handleDragEnd(){dragRef.current=null;}
+  // Touch-based reorder for iOS
+  function handleTouchStart(e,gym,idx){dragRef.current={gym,idx,startY:e.touches[0].clientY};}
+  function handleTouchMove(e,gym,itemKey){
+    if(!dragRef.current||dragRef.current.gym!==gym)return;
+    e.preventDefault();
+    const touchY=e.touches[0].clientY;
+    const els=document.querySelectorAll('[data-reorder-gym="'+gym+'"]');
+    let targetIdx=null;
+    els.forEach(function(el,i){
+      const rect=el.getBoundingClientRect();
+      if(touchY>=rect.top&&touchY<=rect.bottom)targetIdx=i;
+    });
+    if(targetIdx!==null&&targetIdx!==dragRef.current.idx){
+      const list=sortedList(gym,filtered(grouped[gym]||[]));const keys=list.map(w=>w.key);
+      const moved=keys.splice(dragRef.current.idx,1)[0];keys.splice(targetIdx,0,moved);
+      const newOrder={...routineOrder,[gym]:keys};saveLS('fitlog_routine_order',newOrder);setRoutineOrder(newOrder);onReorder(newOrder);dragRef.current={...dragRef.current,idx:targetIdx};
+    }
+  }
+  function handleTouchEnd(){dragRef.current=null;}
   const chips=[
     {id:'all',label:'All',color:T.sub,bg:'rgba(255,255,255,0.08)'},{id:'push',label:'Push',color:TYPE_COLORS.push,bg:TYPE_COLORS.push+'20'},{id:'pull',label:'Pull',color:TYPE_COLORS.pull,bg:TYPE_COLORS.pull+'20'},{id:'legs',label:'Legs',color:TYPE_COLORS.legs,bg:TYPE_COLORS.legs+'20'},
     {id:'gym_pm',label:'Power Matrix',color:'#e8a020',bg:'rgba(232,160,32,0.15)'},{id:'gym_anthropic',label:'Anthropic',color:'#d97706',bg:'rgba(217,119,6,0.15)'},{id:'gym_rrb',label:'RRB',color:'#a78bfa',bg:'rgba(167,139,250,0.15)'},{id:'gym_pf',label:'PF',color:CAT.pf,bg:CAT.pf+'20'},{id:'gym_golds',label:"Gold's",color:'#fbbf24',bg:'rgba(251,191,36,0.15)'},{id:'gym_anytime',label:'AF',color:'#34d399',bg:'rgba(52,211,153,0.15)'},
     {id:'upper',label:'Upper',color:TYPE_COLORS.upper,bg:TYPE_COLORS.upper+'20'},{id:'full',label:'Full Body',color:TYPE_COLORS.full,bg:TYPE_COLORS.full+'20'},{id:'core',label:'Core',color:TYPE_COLORS.core,bg:TYPE_COLORS.core+'20'},{id:'other',label:'Other',color:TYPE_COLORS.other,bg:TYPE_COLORS.other+'20'},
   ];
+  if(viewingRoutine){
+    const w=workouts[viewingRoutine];
+    if(!w){setViewingRoutine(null);return null;}
+    const rd=loadLS('fitlog_rest_defaults',{_default:120});
+    const totalSets=(w.exercises||[]).reduce(function(t,ex){return t+ex.sets;},0);
+    const accent2=CAT[w.category]||'#06b6d4';
+    return React.createElement('div',{style:{position:'fixed',inset:0,zIndex:300,background:T.bg,overflowY:'auto'}},
+      React.createElement('div',{style:{position:'sticky',top:0,background:T.bg,borderBottom:'1px solid '+T.border,padding:'calc(env(safe-area-inset-top) + 14px) 16px 14px',display:'flex',alignItems:'center',gap:12,zIndex:10}},
+        React.createElement('button',{onClick:function(){setViewingRoutine(null);},style:{width:36,height:36,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:18,cursor:'pointer',flexShrink:0,WebkitTapHighlightColor:'transparent'}},'<'),
+        React.createElement('div',{style:{flex:1}},
+          React.createElement('div',{style:{fontSize:17,fontWeight:700,color:T.text}},w.label),
+          React.createElement('div',{style:{fontSize:11,color:T.dim,marginTop:2}},totalSets+' sets total')
+        ),
+        React.createElement('button',{onClick:function(){setViewingRoutine(null);setStrongFormat(viewingRoutine);},style:{padding:'7px 12px',borderRadius:8,border:'1px solid rgba(20,184,166,0.4)',background:'rgba(20,184,166,0.1)',color:'#5eead4',fontSize:12,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'Strong Format')
+      ),
+      w.note&&React.createElement('div',{style:{margin:'12px 16px 0',padding:'10px 14px',background:T.bg2,borderRadius:10,border:'1px solid '+T.border,fontSize:13,color:T.muted,lineHeight:1.5}},w.note),
+      React.createElement('div',{style:{padding:'12px 16px 100px'}},
+        (w.exercises||[]).map(function(ex,i){
+          var restSec=rd[ex.id]||rd._default||120;
+          var mins=Math.floor(restSec/60);var secs=restSec%60;
+          var restStr=mins+'m'+(secs?secs+'s':'');
+          return React.createElement('div',{key:ex.id+i,style:{display:'flex',alignItems:'center',gap:12,padding:'13px 14px',marginBottom:6,background:T.bg2,borderRadius:10,border:'1px solid '+T.border}},
+            React.createElement('div',{style:{width:3,borderRadius:2,alignSelf:'stretch',background:accent2,flexShrink:0}}),
+            React.createElement('div',{style:{flex:1,minWidth:0}},
+              React.createElement('div',{style:{fontSize:14,fontWeight:600,color:T.text}},ex.name),
+              React.createElement('div',{style:{fontSize:11,color:T.dim,marginTop:2}},ex.sets+' sets · '+ex.reps+' reps · ⏱ '+restStr)
+            )
+          );
+        })
+      )
+    );
+  }
+
   if(strongFormat){
     var w=workouts[strongFormat];
     if(!w){setStrongFormat(null);return null;}
@@ -1013,7 +1066,7 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
           reordering?React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:6}},
             list.map((w,idx)=>{
               const tc=TYPE_COLORS[w.wtype]||CAT[w.category]||'#64748b';
-              return React.createElement('div',{key:w.key,draggable:true,onDragStart:()=>handleDragStart(gym,idx),onDragOver:(e)=>handleDragOver(e,gym,idx),onDragEnd:handleDragEnd,style:{background:T.bg2,borderRadius:10,border:'1px solid '+T.border,padding:'12px 14px',display:'flex',alignItems:'center',gap:10,cursor:'grab',userSelect:'none'}},
+              return React.createElement('div',{key:w.key,'data-reorder-gym':gym,draggable:true,onDragStart:()=>handleDragStart(gym,idx),onDragOver:(e)=>handleDragOver(e,gym,idx),onDragEnd:handleDragEnd,onTouchStart:(e)=>handleTouchStart(e,gym,idx),onTouchMove:(e)=>handleTouchMove(e,gym,w.key),onTouchEnd:handleTouchEnd,style:{background:T.bg2,borderRadius:10,border:'1px solid '+T.border,padding:'12px 14px',display:'flex',alignItems:'center',gap:10,cursor:'grab',userSelect:'none'}},
                 React.createElement('div',{style:{fontSize:18,color:T.dim,flexShrink:0}},'☰'),
                 React.createElement('div',{style:{width:3,borderRadius:2,alignSelf:'stretch',background:tc,flexShrink:0}}),
                 React.createElement('div',{style:{flex:1,minWidth:0}},React.createElement('div',{style:{fontSize:14,fontWeight:600,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},w.label)),
@@ -1029,7 +1082,7 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
               const isSelected=selected.has(w.key);
               return React.createElement('div',{
                 key:w.key,
-                onClick:()=>{if(archiving){setSelected(s=>{const n=new Set(s);n.has(w.key)?n.delete(w.key):n.add(w.key);return n;});}else{onStartWorkout&&onStartWorkout(w.key);}},
+                onClick:()=>{if(archiving){setSelected(s=>{const n=new Set(s);n.has(w.key)?n.delete(w.key):n.add(w.key);return n;});}else{setViewingRoutine(w.key);}},
                 style:{position:'relative',background:T.bg2,borderRadius:12,border:'1px solid '+(isSelected?'#f87171':T.border),padding:'12px 12px 10px',cursor:'pointer',WebkitTapHighlightColor:'transparent',minHeight:118,display:'flex',flexDirection:'column'}
               },
                 React.createElement('div',{style:{width:3,height:16,borderRadius:2,background:tc,marginBottom:6}}),
