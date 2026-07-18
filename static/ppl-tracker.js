@@ -263,7 +263,7 @@ function getWeeklyVolume(allLogs,refDate,customBpOverride){
 }
 
 // Weekly volume targets (sets/week) — from Anthropic PPL Hypertrophy Restructure v2
-const TARGET_VOLUME={Chest:[20,25],Back:[20,25],Shoulders:[20,25],Biceps:[20,25],Triceps:[20,25],Quads:[20,25],Hamstrings:[20,25],Glutes:[20,25],Calves:[20,25],Core:null};
+const TARGET_VOLUME={Chest:[22,26],Back:[25,29],Shoulders:[25,29],Biceps:[12,16],Triceps:[15,19],Quads:[19,23],Hamstrings:[14,18],Glutes:null,Calves:[12,16],Core:null};
 
 function WeeklyVolumeCard({allLogs,customBp,setCustomBp}){
   const[collapsed,setCollapsed]=useState(false);
