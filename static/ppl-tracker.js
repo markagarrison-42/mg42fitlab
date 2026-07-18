@@ -822,7 +822,7 @@ function RoutineEditor({workout,workoutKey,workouts,allLogs,onSave,onClose}){
   }
 
   return React.createElement('div',{style:{position:'fixed',inset:0,zIndex:300,background:'rgba(0,0,0,0.95)',backdropFilter:'blur(8px)',overflowY:'auto',paddingBottom:80}},
-    React.createElement('div',{style:{position:'sticky',top:0,zIndex:10,background:T.bg,borderBottom:'1px solid '+T.border,padding:'14px 16px',display:'flex',alignItems:'center',gap:12}},
+    React.createElement('div',{style:{position:'sticky',top:0,zIndex:10,background:T.bg,borderBottom:'1px solid '+T.border,padding:'calc(env(safe-area-inset-top) + 14px) 16px',display:'flex',alignItems:'center',gap:12}},
       React.createElement('button',{onClick:onClose,style:{width:44,height:44,borderRadius:10,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:22,cursor:'pointer',lineHeight:1,flexShrink:0}},'<'),
       React.createElement('div',{style:{flex:1,fontSize:17,fontWeight:700,color:T.text}},'Edit Routine'),
       React.createElement('button',{onClick:()=>onSave(workoutKey,draft),style:{padding:'9px 16px',borderRadius:10,border:'none',background:GRAD.button,color:'#fff',fontWeight:700,fontSize:14,cursor:'pointer',minHeight:42}},'Save')
@@ -956,7 +956,7 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
     function sfDownload(){var blob=new Blob([sfText],{type:'text/plain'});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download=w.label.replace(/[^a-z0-9]/gi,'_')+'.txt';a.click();URL.revokeObjectURL(url);}
     return React.createElement('div',{style:{position:'fixed',inset:0,zIndex:300,background:'rgba(0,0,0,0.95)',backdropFilter:'blur(8px)',overflowY:'auto',padding:'20px 16px'}},
       React.createElement('div',{style:{maxWidth:600,margin:'0 auto'}},
-        React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}},
+        React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,paddingTop:'env(safe-area-inset-top)'}},  
           React.createElement('div',{style:{fontSize:18,fontWeight:700,color:T.text}},w.label),
           React.createElement('button',{onClick:function(){setStrongFormat(null);},style:{padding:'8px 14px',borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:13,cursor:'pointer'}},'Close')
         ),
@@ -1053,7 +1053,6 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
       React.createElement('div',{onClick:e=>e.stopPropagation(),style:{background:T.bg2,borderRadius:'20px 20px 0 0',padding:'8px 16px 40px'}},
         React.createElement('div',{style:{width:40,height:4,borderRadius:2,background:T.border2,margin:'8px auto 20px'}}),
         React.createElement('div',{style:{fontSize:14,fontWeight:700,color:T.text,marginBottom:16,textAlign:'center'}},actionSheetRoutine.label),
-        React.createElement('button',{onClick:()=>{onStartWorkout&&onStartWorkout(actionSheet);setActionSheet(null);},style:{width:'100%',padding:'14px 16px',marginBottom:8,borderRadius:12,border:'none',background:GRAD.button,color:'#fff',fontSize:15,fontWeight:700,cursor:'pointer',WebkitTapHighlightColor:'transparent',textAlign:'left'}},'▶  Start Workout'),
         React.createElement('button',{onClick:()=>{setStrongFormat(actionSheet);setActionSheet(null);},style:{width:'100%',padding:'14px 16px',marginBottom:8,borderRadius:12,border:'none',background:'rgba(20,184,166,0.1)',color:'#5eead4',fontSize:15,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent',textAlign:'left'}},'Strong Format'),
         React.createElement('button',{onClick:()=>{setEditingRoutine(actionSheet);setActionSheet(null);},style:{width:'100%',padding:'14px 16px',marginBottom:8,borderRadius:12,border:'none',background:'rgba(124,58,237,0.15)',color:'#a78bfa',fontSize:15,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent',textAlign:'left'}},'Edit Routine'),
         React.createElement('button',{onClick:()=>{if(window.confirm('Archive '+actionSheetRoutine.label+'?')){onArchive(actionSheet);}setActionSheet(null);},style:{width:'100%',padding:'14px 16px',borderRadius:12,border:'none',background:'rgba(239,68,68,0.1)',color:'#f87171',fontSize:15,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent',textAlign:'left'}},'Archive Routine')
@@ -1592,8 +1591,14 @@ function PPLTracker(){
   function setSchedule(w){setScheduleRaw(w);saveLS('fitlog_schedule',w);saveServerSchedule(w);}
   function setRestDefaults(d){setRestDefaultsRaw(d);saveLS('fitlog_rest_defaults',d);saveServerRestDefaults(d);}
   function handleReorder(newOrder){saveLS('fitlog_routine_order',newOrder);}
-  function handleArchive(key){saveLS('fitlog_archived_'+key,true);}
-  function handleUnarchive(key){localStorage.removeItem('fitlog_archived_'+key);}
+  function handleArchive(key){
+    const updated={...workouts,[key]:{...workouts[key],archived:true}};
+    setWorkouts(updated);
+  }
+  function handleUnarchive(key){
+    const updated={...workouts,[key]:{...workouts[key],archived:false}};
+    setWorkouts(updated);
+  }
 
   function handleUpdateLog(exId,logIdx,updates){
     const logs={...allLogs};const arr=[...(logs[exId]||[])];
@@ -1681,7 +1686,8 @@ function PPLTracker(){
       const fitlogRoutines=parseFitLogRoutineCSV(text);
       if(fitlogRoutines){
         const preview=Object.entries(fitlogRoutines).map(([label,r])=>{
-          const existingKey=Object.entries(workouts).find(([k,w])=>w.label.toLowerCase()===label.toLowerCase());
+          const existingEntry=Object.entries(workouts).find(([k,w])=>w.label.toLowerCase()===label.toLowerCase());
+          const existingKey=existingEntry?existingEntry[0]:null;
           return{label,note:r.note,wtype:r.wtype,exercises:r.exercises,existingKey,willUpdate:!!existingKey};
         });
         setPendingRoutineImport({preview});return;
@@ -1782,6 +1788,7 @@ function PPLTracker(){
           React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:6}},
             React.createElement('button',{onClick:()=>confirmImport(true,true),style:{width:'100%',padding:10,borderRadius:8,border:'none',background:GRAD.button,color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer'}},'Import History + New Routines'),
             React.createElement('button',{onClick:()=>confirmImport(true,false),style:{width:'100%',padding:10,borderRadius:8,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:13,cursor:'pointer'}},'History Only'),
+            React.createElement('button',{onClick:()=>confirmImport(false,true),style:{width:'100%',padding:10,borderRadius:8,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:13,cursor:'pointer'}},'New Routines Only'),
             React.createElement('button',{onClick:()=>setPendingImport(null),style:{width:'100%',padding:10,borderRadius:8,border:'1px solid '+T.border2,background:'transparent',color:T.dim,fontSize:12,cursor:'pointer'}},'Cancel')
           )
         ),
