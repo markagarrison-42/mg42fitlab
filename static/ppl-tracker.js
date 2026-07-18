@@ -1,3 +1,4 @@
+// FitLog v2.1 — Titan Protocol + Traps
 const { useState, useEffect, useRef } = React;
 
 // ── SUPABASE CLIENT ────────────────────────────────────────────────────────────
