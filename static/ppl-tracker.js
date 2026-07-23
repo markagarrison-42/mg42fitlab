@@ -195,23 +195,33 @@ const PROTECTED_KEYS=new Set(['push_a','push_b','pull_a','pull_b','legs_a','legs
 
 function inferBodyPart(name){
   const n=name.toLowerCase();
+  // Traps (check before shoulders since shrug is often misclassified)
+  if(/shrug|trap bar|farmer/.test(n))return'Traps';
+  // Chest
   if(/bench|chest|fly|pec|cable cross|cybex|incline press|decline press/.test(n)&&!/row/.test(n))return'Chest';
-  if(/row|pulldown|pull.?up|lat |chin.?up|seated row|cable row|t.bar|rack pull/.test(n)&&!/lateral raise/.test(n))return'Back';
-  if(/deadlift/.test(n)&&!/romanian|rdl|stiff/.test(n))return'Back';
+  // Shoulders (face pull = shoulders, not back)
   if(/shoulder press|military|overhead press|arnold|lateral raise|front raise|delt|face pull|upright row/.test(n))return'Shoulders';
-  if(/shrug/.test(n))return'Shoulders';
+  // Glutes (deadlift = glutes as primary driver)
+  if(/deadlift/.test(n)&&!/romanian|rdl|stiff|sumo/.test(n))return'Glutes';
+  // Hamstrings
+  if(/romanian|rdl|stiff.?leg|leg curl|nordic|hamstring|glute.?ham|ghd/.test(n))return'Hamstrings';
+  // Back
+  if(/row|pulldown|pull.?up|lat |chin.?up|seated row|cable row|t.bar|rack pull/.test(n)&&!/lateral raise/.test(n))return'Back';
+  // Biceps
   if(/(bicep|biceps) curl|hammer curl|incline curl|concentration curl|preacher|waiter curl|overhead curl|cable curl/.test(n))return'Biceps';
   if(/curl/.test(n)&&!/leg curl|nordic|hamstring|wrist/.test(n))return'Biceps';
-  if(/tricep|pushdown|pull.?down.*tri|skullcrusher|skull crusher|tate press|dip/.test(n)&&!/lat pulldown|chin/.test(n))return'Triceps';
-  if(/squat|leg press|hack squat|lunge|split squat|step.?up|quad|leg ext/.test(n)&&!/nordic|curl/.test(n))return'Quads';
-  if(/romanian|rdl|stiff.?leg|leg curl|nordic|hamstring|glute.?ham/.test(n))return'Hamstrings';
+  // Triceps
+  if(/tricep|pushdown|skullcrusher|skull crusher|tate press|dip/.test(n)&&!/lat pulldown|chin/.test(n))return'Triceps';
+  // Quads
+  if(/squat|leg press|hack squat|lunge|step.?up|quad|leg ext/.test(n)&&!/nordic|curl/.test(n))return'Quads';
+  if(/bulgarian|split squat/.test(n))return'Quads';
+  // Glutes (explicit glute exercises)
   if(/glute|hip thrust|kickback|abduction|fire hydrant/.test(n))return'Glutes';
+  // Calves
   if(/calf|calves|calf press|seated calf|standing calf|tibialis/.test(n))return'Calves';
+  // Core
   if(/ab |crunch|plank|russian twist|v.?up|side bend|core|oblique|cable crunch/.test(n))return'Core';
-  if(/ghd/.test(n))return'Hamstrings';
-  if(/bulgarian/.test(n))return'Quads';
-  if(/shrug|trap|neck|farmer/.test(n))return'Traps';
-  return'Quads'; // fallback for leg exercises
+  return'Quads';
 }
 function inferEquipment(name){
   const n=name.toLowerCase();
@@ -265,7 +275,7 @@ function getWeeklyVolume(allLogs,refDate,customBpOverride){
 }
 
 // Weekly volume targets (sets/week) — from Anthropic PPL Hypertrophy Restructure v2
-const TARGET_VOLUME={Chest:[22,26],Back:[25,29],Shoulders:[25,29],Biceps:[12,16],Triceps:[15,19],Quads:[19,23],Hamstrings:[14,18],Glutes:null,Calves:[12,16],Core:null,Traps:null};
+const TARGET_VOLUME={Chest:[20,24],Back:[22,26],Shoulders:[20,24],Biceps:[15,19],Triceps:[15,19],Quads:[16,20],Hamstrings:[14,18],Glutes:[14,18],Calves:[15,19],Core:null,Traps:[6,10]};
 
 function WeeklyVolumeCard({allLogs,customBp,setCustomBp}){
   const[collapsed,setCollapsed]=useState(false);
@@ -998,27 +1008,96 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
     var w=workouts[strongFormat];
     if(!w){setStrongFormat(null);return null;}
     var rd=loadLS('fitlog_rest_defaults',{_default:120});
-    var sfLines=(w.exercises||[]).map(function(ex){
+    var folderName=GYM_LABELS[w.gym]||'FitLog';
+    var templateName=w.label;
+
+    // Build Strong template CSV rows
+    // Columns: Template #,Folder Name,Template Name,Exercise Name,Set Order,Superset Index,Weight (kg),Reps,Set Duration (sec),Distance (m),Rest Timer (sec),Exercise Sticky Note,Exercise Notes,Template Note
+    var csvRows=['"Template #","Folder Name","Template Name","Exercise Name","Set Order","Superset Index","Weight (kg)","Reps","Set Duration (sec)","Distance (m)","Rest Timer (sec)","Exercise Sticky Note","Exercise Notes","Template Note"'];
+    var templateNote=w.note||'';
+    var exNotes='';
+
+    (w.exercises||[]).forEach(function(ex,exIdx){
+      var restSec=rd[ex.id]||rd._default||120;
+      var sets=parseInt(ex.sets)||3;
+      var repsStr=ex.reps||'';
+
+      // Parse reps — handle ramp scheme (8/8/3/1/1/1/5) or flat (10-12)
+      var rampSets=[];
+      if(repsStr.indexOf('/')>-1){
+        rampSets=repsStr.split('/').map(function(r){return parseInt(r)||0;});
+      }
+
+      for(var setIdx=0;setIdx<sets;setIdx++){
+        var setOrder=setIdx+1;
+        var repsVal=rampSets.length>0?(rampSets[setIdx]||rampSets[rampSets.length-1]):'';
+        // For rep ranges like "10-12", use the upper number as the target
+        if(!repsVal&&repsStr){
+          var parts=repsStr.split('-');
+          repsVal=parseInt(parts[parts.length-1])||'';
+        }
+        var isFirst=setIdx===0;
+        var row=[
+          1,                          // Template #
+          '"'+folderName+'"',         // Folder Name
+          '"'+templateName+'"',       // Template Name
+          '"'+ex.name+'"',            // Exercise Name
+          setOrder,                   // Set Order
+          0,                          // Superset Index
+          '',                         // Weight (kg) - leave blank, user fills in
+          repsVal,                    // Reps
+          '',                         // Set Duration (sec)
+          '',                         // Distance (m)
+          restSec,                    // Rest Timer (sec)
+          '',                         // Exercise Sticky Note
+          isFirst?'"'+exNotes+'"':'',// Exercise Notes (first set only)
+          isFirst&&exIdx===0?'"'+templateNote+'"':'' // Template Note (first row only)
+        ];
+        csvRows.push(row.join(','));
+      }
+    });
+
+    var csvText=csvRows.join('\n');
+    var filename=w.label.replace(/[^a-z0-9]/gi,'_')+'_strong_template.csv';
+
+    function sfDownloadCSV(){
+      var blob=new Blob([csvText],{type:'text/csv'});
+      var url=URL.createObjectURL(blob);
+      var a=document.createElement('a');
+      a.href=url;a.download=filename;a.click();URL.revokeObjectURL(url);
+    }
+    function sfCopyCSV(){
+      if(navigator.clipboard){navigator.clipboard.writeText(csvText).then(function(){alert('CSV copied — paste into a .csv file and import into Strong.');});}
+    }
+
+    // Preview: plain text summary for display
+    var nl='\n';
+    var previewLines=(w.exercises||[]).map(function(ex){
       var restSec=rd[ex.id]||rd._default||120;
       var mins=Math.floor(restSec/60);var secs=restSec%60;
-      var restStr=mins+'m'+(secs?secs+'s':'');
-      var nm=ex.name;while(nm.length<32)nm=nm+' ';
-      return nm+ex.sets+' sets   '+ex.reps+'   '+restStr;
+      var nm=ex.name;while(nm.length<30)nm=nm+' ';
+      return nm+ex.sets+' sets   '+ex.reps+'   '+Math.floor(restSec/60)+'m'+(restSec%60?restSec%60+'s':'');
     });
     var totalSets=(w.exercises||[]).reduce(function(t,ex){return t+ex.sets;},0);
-    var nl='\n';var sep='----------------------------------------';var sfText=w.label.toUpperCase()+nl+sep+nl+sfLines.join(nl)+nl+sep+nl+'Total: '+totalSets+' sets';
-    function sfCopy(){if(navigator.clipboard){navigator.clipboard.writeText(sfText).then(function(){alert('Copied!');});}else{var ta=document.createElement('textarea');ta.value=sfText;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);alert('Copied!');}}
-    function sfDownload(){var blob=new Blob([sfText],{type:'text/plain'});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download=w.label.replace(/[^a-z0-9]/gi,'_')+'.txt';a.click();URL.revokeObjectURL(url);}
+    var sep='------------------------------------------';
+    var previewText=w.label.toUpperCase()+nl+sep+nl+previewLines.join(nl)+nl+sep+nl+'Total: '+totalSets+' sets';
+
     return React.createElement('div',{style:{position:'fixed',inset:0,zIndex:300,background:'rgba(0,0,0,0.95)',backdropFilter:'blur(8px)',overflowY:'auto',padding:'20px 16px'}},
       React.createElement('div',{style:{maxWidth:600,margin:'0 auto'}},
-        React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,paddingTop:'env(safe-area-inset-top)'}},  
-          React.createElement('div',{style:{fontSize:18,fontWeight:700,color:T.text}},w.label),
+        React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,paddingTop:'env(safe-area-inset-top)'}},
+          React.createElement('div',null,
+            React.createElement('div',{style:{fontSize:18,fontWeight:700,color:T.text}},w.label),
+            React.createElement('div',{style:{fontSize:11,color:T.dim,marginTop:2}},'Strong template · '+folderName)
+          ),
           React.createElement('button',{onClick:function(){setStrongFormat(null);},style:{padding:'8px 14px',borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:13,cursor:'pointer'}},'Close')
         ),
-        React.createElement('pre',{style:{background:T.bg2,borderRadius:12,border:'1px solid '+T.border,padding:16,fontSize:12,color:T.text,fontFamily:T.mono,lineHeight:1.9,overflowX:'auto',whiteSpace:'pre-wrap',wordBreak:'break-word',marginBottom:16}},sfText),
+        React.createElement('pre',{style:{background:T.bg2,borderRadius:12,border:'1px solid '+T.border,padding:16,fontSize:12,color:T.text,fontFamily:T.mono,lineHeight:1.8,overflowX:'auto',whiteSpace:'pre-wrap',wordBreak:'break-word',marginBottom:16}},previewText),
+        React.createElement('div',{style:{marginBottom:12,padding:'10px 14px',background:'rgba(20,184,166,0.08)',borderRadius:10,border:'1px solid rgba(20,184,166,0.2)',fontSize:12,color:'#5eead4',lineHeight:1.5}},
+          'Download the CSV and import it into Strong via Settings → Templates → Import. Weight is left blank so you can fill in your working weights.'
+        ),
         React.createElement('div',{style:{display:'flex',gap:10}},
-          React.createElement('button',{onClick:sfCopy,style:{flex:1,padding:13,borderRadius:10,border:'none',background:GRAD.button,color:'#fff',fontWeight:700,fontSize:14,cursor:'pointer'}},'Copy to Clipboard'),
-          React.createElement('button',{onClick:sfDownload,style:{padding:13,borderRadius:10,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:14,cursor:'pointer'}},'Download')
+          React.createElement('button',{onClick:sfDownloadCSV,style:{flex:1,padding:13,borderRadius:10,border:'none',background:GRAD.button,color:'#fff',fontWeight:700,fontSize:14,cursor:'pointer'}},'Download CSV for Strong'),
+          React.createElement('button',{onClick:sfCopyCSV,style:{padding:13,borderRadius:10,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:14,cursor:'pointer'}},'Copy')
         )
       )
     );
