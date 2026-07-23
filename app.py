@@ -285,6 +285,80 @@ def push_cancel_timer():
         except: pass
     return jsonify({"ok": True})
 
+
+# ── AI ROUTINE GENERATOR ──────────────────────────────────────────────────────
+@app.route("/api/generate-routine", methods=["POST"])
+def generate_routine():
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json()
+    prompt = data.get("prompt", "").strip()
+    if not prompt:
+        return jsonify({"error": "No prompt provided"}), 400
+
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not anthropic_key:
+        return jsonify({"error": "API key not configured"}), 500
+
+    try:
+        import urllib.request as urlreq
+
+        system_prompt = """You are a strength training program designer. Output ONLY a Strong template CSV with NO other text.
+
+Header row (exact):
+"Template #","Folder Name","Template Name","Exercise Name","Set Order","Superset Index","Weight (kg)","Reps","Set Duration (sec)","Distance (m)","Rest Timer (sec)","Exercise Sticky Note","Exercise Notes","Template Note"
+
+Rules:
+- Template # is always 1
+- Folder Name: program category (e.g. "Custom", "Anthropic")
+- Template Name: workout name (e.g. "Push Day")
+- Set Order: 1,2,3... per exercise, restarting for each new exercise
+- Superset Index: 0 unless supersetted
+- Weight (kg): always blank
+- Reps: integer (upper end of range, e.g. 12 for 8-12)
+- Set Duration, Distance: blank unless cardio
+- Rest Timer (sec): integer (e.g. 90, 120, 180)
+- Exercise Sticky Note, Exercise Notes: blank
+- Template Note: only on the very first data row, blank on all others
+
+Output ONLY the CSV. No markdown, no explanation, no code fences."""
+
+        payload = json.dumps({
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 2000,
+            "system": system_prompt,
+            "messages": [{"role": "user", "content": prompt}]
+        }).encode("utf-8")
+
+        req = urlreq.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=payload,
+            headers={
+                "x-api-key": anthropic_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
+            }
+        )
+
+        with urlreq.urlopen(req, timeout=30) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+
+        csv_text = result["content"][0]["text"].strip()
+        # Strip accidental markdown fences
+        lines = csv_text.split("\n")
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        csv_text = "\n".join(lines).strip()
+
+        return jsonify({"csv": csv_text})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # ── ENTRY POINT ───────────────────────────────────────────────────────────────
 application = app
 if __name__ == "__main__":

@@ -937,6 +937,10 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
   const[editingRoutine,setEditingRoutine]=useState(null);
   const[strongFormat,setStrongFormat]=useState(null);
   const[viewingRoutine,setViewingRoutine]=useState(null);
+  const[generating,setGenerating]=useState(false);
+  const[genPrompt,setGenPrompt]=useState('');
+  const[genError,setGenError]=useState('');
+  const[genResult,setGenResult]=useState(null);
   const[archiving,setArchiving]=useState(false);
   const[selected,setSelected]=useState(new Set());const[filterType,setFilterType]=useState('all');
   const[expandedGym,setExpandedGym]=useState(null);const[reordering,setReordering]=useState(false);
@@ -1016,6 +1020,109 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
             )
           );
         })
+      )
+    );
+  }
+
+  if(generating){
+    return React.createElement('div',{style:{position:'fixed',inset:0,zIndex:300,background:T.bg,overflowY:'auto'}},
+      React.createElement('div',{style:{position:'sticky',top:0,background:T.bg,borderBottom:'1px solid '+T.border,padding:'calc(env(safe-area-inset-top) + 14px) 16px 14px',display:'flex',alignItems:'center',gap:12,zIndex:10}},
+        React.createElement('button',{onClick:function(){setGenerating(false);setGenResult(null);setGenError('');setGenPrompt('');},style:{width:36,height:36,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:18,cursor:'pointer',flexShrink:0}},'<'),
+        React.createElement('div',{style:{fontSize:17,fontWeight:700,color:T.text}},'Generate Routine')
+      ),
+      React.createElement('div',{style:{padding:16}},
+        !genResult&&React.createElement('div',null,
+          React.createElement('div',{style:{fontSize:13,color:T.muted,marginBottom:16,lineHeight:1.6}},'Describe the routine you want. Include details like muscle groups, equipment available, sets/reps style, and how many days.'),
+          React.createElement('textarea',{
+            value:genPrompt,
+            onChange:function(e){setGenPrompt(e.target.value);},
+            placeholder:'e.g. Push day for my Anthropic gym (Smith machine, cables, dumbbells). Chest, shoulders, triceps. 6-7 exercises, Power Matrix ramp on bench press, 90-120s rest.',
+            style:{width:'100%',minHeight:140,padding:'12px 14px',background:T.bg2,border:'1px solid '+T.border2,borderRadius:10,color:T.text,fontSize:14,fontFamily:T.sans,lineHeight:1.6,resize:'vertical',marginBottom:12}
+          }),
+          genError&&React.createElement('div',{style:{padding:'10px 14px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:8,fontSize:13,color:'#f87171',marginBottom:12}},genError),
+          React.createElement('button',{
+            onClick:async function(){
+              if(!genPrompt.trim())return;
+              setGenError('');
+              var btn=document.activeElement;if(btn)btn.blur();
+              // Show loading state
+              setGenResult('loading');
+              try{
+                var session=await supabase.auth.getSession();
+                var token=(session.data&&session.data.session)?session.data.session.access_token:'';
+                var resp=await fetch('/api/generate-routine',{
+                  method:'POST',
+                  headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+                  body:JSON.stringify({prompt:genPrompt})
+                });
+                var data=await resp.json();
+                if(data.error){setGenError(data.error);setGenResult(null);return;}
+                setGenResult(data.csv);
+              }catch(err){
+                setGenError('Request failed: '+err.message);
+                setGenResult(null);
+              }
+            },
+            disabled:!genPrompt.trim(),
+            style:{width:'100%',padding:14,borderRadius:10,border:'none',background:genPrompt.trim()?GRAD.button:'rgba(124,58,237,0.2)',color:'#fff',fontWeight:700,fontSize:15,cursor:genPrompt.trim()?'pointer':'default',minHeight:50,WebkitTapHighlightColor:'transparent'}
+          },genResult==='loading'?'Generating...':'Generate Routine with AI')
+        ),
+        genResult&&genResult!=='loading'&&React.createElement('div',null,
+          React.createElement('div',{style:{fontSize:13,fontWeight:700,color:'#34d399',marginBottom:8}},'Routine generated'),
+          React.createElement('div',{style:{fontSize:12,color:T.dim,marginBottom:12,lineHeight:1.5}},'Download and import into Strong via Settings → Templates → Import. Or import into FitLog to add to your routines.'),
+          React.createElement('pre',{style:{background:T.bg2,borderRadius:10,border:'1px solid '+T.border,padding:12,fontSize:10,color:T.sub,fontFamily:T.mono,overflowX:'auto',whiteSpace:'pre-wrap',wordBreak:'break-all',marginBottom:14,maxHeight:200}},genResult.split('\n').slice(0,4).join('\n')+'\n... ('+genResult.split('\n').length+' rows)'),
+          React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:8}},
+            React.createElement('button',{
+              onClick:function(){
+                var blob=new Blob([genResult],{type:'text/csv'});
+                var url=URL.createObjectURL(blob);
+                var a=document.createElement('a');
+                a.href=url;a.download='generated_routine_strong.csv';a.click();
+                URL.revokeObjectURL(url);
+              },
+              style:{width:'100%',padding:13,borderRadius:10,border:'none',background:GRAD.button,color:'#fff',fontWeight:700,fontSize:14,cursor:'pointer'}
+            },'Download Strong CSV'),
+            React.createElement('button',{
+              onClick:function(){
+                // Parse as FitLog routine and import
+                var rows=genResult.split('\n');
+                if(rows.length<2)return;
+                var templateName='';var exercises=[];
+                var dataRows=rows.slice(1).filter(function(r){return r.trim();});
+                dataRows.forEach(function(row){
+                  var fields=[];var cur='';var inQ=false;
+                  for(var i=0;i<row.length;i++){var ch=row[i];if(ch==='"'){inQ=!inQ;}else if(ch===','&&!inQ){fields.push(cur.trim());cur='';}else{cur+=ch;}}
+                  fields.push(cur.trim());
+                  if(!templateName&&fields[2])templateName=fields[2].replace(/^"|"$/g,'');
+                  var exName=(fields[3]||'').replace(/^"|"$/g,'');
+                  var setOrder=parseInt(fields[4])||0;
+                  var restSec=parseInt(fields[10])||120;
+                  if(exName&&setOrder===1){
+                    var exId=exName.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+                    exercises.push({id:exId,name:exName,sets:1,reps:'8-12',_restSec:restSec});
+                  } else if(exName&&exercises.length){
+                    exercises[exercises.length-1].sets++;
+                  }
+                });
+                if(!templateName||!exercises.length)return;
+                var key='custom_'+templateName.toLowerCase().replace(/[^a-z0-9]+/g,'_')+'_'+Date.now();
+                var routine={label:templateName,tag:'Custom',category:'other',gym:'anthropic',wtype:'other',note:'AI generated',exercises:exercises};
+                onSaveRoutine(key,routine);
+                alert('Added "'+templateName+'" to your routines!');
+                setGenerating(false);setGenResult(null);setGenPrompt('');
+              },
+              style:{width:'100%',padding:13,borderRadius:10,border:'1px solid rgba(20,184,166,0.4)',background:'rgba(20,184,166,0.1)',color:'#5eead4',fontWeight:700,fontSize:14,cursor:'pointer'}
+            },'Import into FitLog'),
+            React.createElement('button',{
+              onClick:function(){setGenResult(null);setGenError('');},
+              style:{width:'100%',padding:11,borderRadius:10,border:'1px solid '+T.border2,background:'transparent',color:T.dim,fontSize:13,cursor:'pointer'}
+            },'Try Again')
+          )
+        ),
+        genResult==='loading'&&React.createElement('div',{style:{textAlign:'center',padding:60,color:T.muted,fontSize:14}},
+          React.createElement('div',{style:{fontSize:32,marginBottom:16}},'\u2728'),
+          'Claude is designing your routine...'
+        )
       )
     );
   }
@@ -1132,6 +1239,7 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
       React.createElement('div',{style:{display:'flex',gap:8,marginBottom:10}},
         React.createElement('input',{type:'text',placeholder:'Search routines...',value:search,onChange:e=>setSearch(e.target.value),style:{flex:1,padding:'10px 14px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:10,color:T.text,fontSize:14,fontFamily:T.mono,minHeight:44}}),
         !archiving&&React.createElement('button',{onClick:()=>{setReordering(r=>!r);setArchiving(false);setSelected(new Set());},style:{padding:'10px 12px',borderRadius:10,border:'1px solid '+(reordering?'#a78bfa':T.border2),background:reordering?'rgba(167,139,250,0.15)':'rgba(255,255,255,0.04)',color:reordering?'#a78bfa':T.muted,fontSize:13,cursor:'pointer',WebkitTapHighlightColor:'transparent',minHeight:44,flexShrink:0,fontWeight:reordering?700:400}},reordering?'Done':'Reorder'),
+        !reordering&&!archiving&&React.createElement('button',{onClick:function(){setGenerating(true);},style:{padding:'10px 12px',borderRadius:10,border:'none',background:GRAD.button,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',WebkitTapHighlightColor:'transparent',minHeight:44,flexShrink:0}},'✨'),
         !reordering&&!archiving&&React.createElement('button',{onClick:()=>{setArchiving(true);setReordering(false);setSelected(new Set());},style:{padding:'10px 12px',borderRadius:10,border:'1px solid rgba(239,68,68,0.4)',background:'rgba(239,68,68,0.08)',color:'#f87171',fontSize:13,cursor:'pointer',WebkitTapHighlightColor:'transparent',minHeight:44,flexShrink:0}},'Archive'),
         archiving&&React.createElement(React.Fragment,null,
           React.createElement('button',{
