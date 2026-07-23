@@ -441,13 +441,27 @@ let _activeTimerJobId=null;
 
 function parseStrongCSV(text){
   const lines=text.trim().split(/\r?\n/);if(!lines.length)return null;
-  const header=lines[0].replace(/^\uFEFF/,'').split(',').map(h=>h.trim().replace(/^"|"$/g,''));
+  function parseLine(line){const fields=[];let cur='',inQ=false;for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'){inQ=!inQ;}else if(c===','&&!inQ){fields.push(cur.trim());cur='';}else{cur+=c;}}fields.push(cur.trim());return fields;}
+  const rawHeader=lines[0].replace(/^\uFEFF/,'');
+  const header=parseLine(rawHeader).map(h=>h.trim().replace(/^"|"$/g,''));
   const col=h=>header.indexOf(h);
-  const iDate=col('Date'),iWorkout=col('Workout Name'),iExercise=col('Exercise Name'),iSetOrder=col('Set Order'),iWeight=col('Weight'),iReps=col('Reps'),iNotes=col('Notes'),iSeconds=col('Seconds');
+
+  // Support both old format (Date, Workout Name) and new format (Workout #, Workout Start Date, Workout Name)
+  const isNewFormat=col('Workout Start Date')>=0||col('Workout #')>=0;
+  const iDate=isNewFormat?col('Workout Start Date'):col('Date');
+  const iWorkout=col('Workout Name');
+  const iExercise=col('Exercise Name');
+  const iSetOrder=col('Set Order');
+  const iWeight=isNewFormat?col('Weight (lb)'):col('Weight');
+  const iReps=col('Reps');
+  const iNotes=isNewFormat?col('Workout Note'):col('Notes');
+  const iSeconds=isNewFormat?col('Set Duration (sec)'):col('Seconds');
+  const iRestTimer=col('Rest Timer (sec)');
+  const iTz=col('Workout Timezone');
+
   if(iDate<0||iWorkout<0||iExercise<0)return null;
   const logs={};const routineMap={};
   function toId(name){return name.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');}
-  function parseLine(line){const fields=[];let cur='',inQ=false;for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'){inQ=!inQ;}else if(c===','&&!inQ){fields.push(cur.trim());cur='';}else{cur+=c;}}fields.push(cur.trim());return fields;}
   function gymFromName(name){const n=name.toLowerCase();if(n.includes('gold')||n.includes('gold\u2019s'))return 'golds';if(n.startsWith('af ')||n.startsWith('at ')||n.startsWith('atc ')||n.includes('anytime'))return 'anytime';if(n.startsWith('pf ')||n.includes('(pf)')||n.includes('planet fitness'))return 'pf';if(n.startsWith('rrb ')||n.includes('(rrb)'))return 'rrb';if(n.startsWith('home '))return 'home';if(n.includes('hotel')||n.includes('sheraton')||n.includes('doubletree')||n.startsWith('msp ')||n.startsWith('cambria ')||n.startsWith('niagara '))return 'hotel';if(n.startsWith('rahway '))return 'rahway';return 'general';}
   function typeFromName(name){const n=name.toLowerCase();if(n.includes('push')||n.includes('chest')||(n.includes('shoulder')&&!n.includes('pull')))return 'push';if(n.includes('pull')||n.includes('back')||n.includes('bis')||n.includes('bicep'))return 'pull';if(n.includes('leg')||n.includes('lower body')||n.includes('squat')||n.includes('glute'))return 'legs';if(n.includes('upper body'))return 'upper';if(n.includes('full body')||n.includes('fullbody')||n.includes('whole body')||n.includes('functional')||n.includes('mentzer'))return 'full';if(n.includes('ab')||n.includes('core'))return 'core';return 'other';}
   for(let i=1;i<lines.length;i++){
@@ -462,7 +476,9 @@ function parseStrongCSV(text){
     const effectiveReps=reps>0?reps:0;
     if(effectiveReps>0||weight>0){
       if(!logs[exId])logs[exId]=[];
-      logs[exId].push({date:new Date(dateStr.replace(' ','T')).toISOString(),weight,reps:effectiveReps||1,e1rm:weight>0?e1rm(weight,effectiveReps||1):0,notes,workoutName:workoutName});
+      var parsedDate=new Date(dateStr.replace(' ','T'));
+      if(isNaN(parsedDate.getTime()))parsedDate=new Date(dateStr);
+      logs[exId].push({date:parsedDate.toISOString(),weight,reps:effectiveReps||1,e1rm:weight>0?e1rm(weight,effectiveReps||1):0,notes,workoutName:workoutName,exName:exerciseName});
     }
     if(workoutName){if(!routineMap[workoutName])routineMap[workoutName]={};if(!routineMap[workoutName][exId]){routineMap[workoutName][exId]={name:exerciseName,sets:0};}const setNum=parseInt(f[iSetOrder])||1;if(setNum>routineMap[workoutName][exId].sets)routineMap[workoutName][exId].sets=setNum;}
   }
