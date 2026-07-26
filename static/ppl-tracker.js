@@ -2052,8 +2052,8 @@ function PPLTracker(){
     [
       {id:'dashboard',label:'Dashboard',icon:'\uD83C\uDFCB'},
       {id:'history',label:'History',icon:'\uD83D\uDCCB'},
-      {id:'routines',label:'Routines',icon:'\uD83D\uDCC5'},
       {id:'schedule',label:'Schedule',icon:'\uD83D\uDCC6'},
+      {id:'routines',label:'Routines',icon:'\uD83D\uDCAF'},
       {id:'settings',label:'Settings',icon:'\u2699\uFE0F'},
     ].map(({id,label,icon})=>React.createElement('button',{key:id,onClick:()=>setTab(id),style:{flex:1,padding:'10px 4px 8px',border:'none',background:'none',color:tab===id?accent:T.dim,fontSize:10,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:3,WebkitTapHighlightColor:'transparent',fontFamily:T.sans}},
       React.createElement('div',{style:{fontSize:20}},icon),
