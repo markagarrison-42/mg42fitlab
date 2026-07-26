@@ -1636,6 +1636,46 @@ function getProgressiveOverload(allLogs, workouts){
     const thisMax = maxWeight(thisWeek);
     const lastMax = maxWeight(lastWeek);
 
+    // Next weight recommendation
+    // Find last logged set with weight to determine working weight
+    const allReal=[...realEntries].sort((a,b)=>new Date(b.date)-new Date(a.date));
+    const lastSet=allReal[0];
+    const lastWeight=lastSet?lastSet.weight:0;
+    const lastReps=lastSet?lastSet.reps:0;
+
+    // Standard increment: 5lb upper body, 10lb lower body
+    const exName=(exercises[exId]||exId).toLowerCase();
+    const isLower=/squat|deadlift|leg press|hack squat|bulgarian|lunge|rdl|romanian/.test(exName);
+    const increment=isLower?10:5;
+    const smallIncrement=isLower?5:2.5;
+
+    let nextWeight=lastWeight;
+    let nextNote='';
+
+    if(!lastWeight){
+      nextWeight=null;
+      nextNote='No data yet';
+    } else if(thisE1rm>lastE1rm+5){
+      // Clear progress — bump weight
+      nextWeight=lastWeight+increment;
+      nextNote='Ready to progress';
+    } else if(thisE1rm>lastE1rm){
+      // Small progress — small bump
+      nextWeight=lastWeight+smallIncrement;
+      nextNote='Small step up';
+    } else if(Math.abs(thisE1rm-lastE1rm)<=5&&thisWeek.length>0){
+      // Stalled — same weight, get more reps
+      nextWeight=lastWeight;
+      nextNote='Hold — chase reps';
+    } else if(thisE1rm<lastE1rm-10){
+      // Regression — drop back
+      nextWeight=Math.max(lastWeight-increment,0);
+      nextNote='Step back';
+    } else {
+      nextWeight=lastWeight;
+      nextNote='Hold';
+    }
+
     results[exId] = {
       name: exercises[exId]||exId.replace(/_/g,' '),
       thisWeek:{e1rm:thisE1rm,vol:thisVol,max:thisMax,sets:thisWeek.length},
@@ -1644,6 +1684,7 @@ function getProgressiveOverload(allLogs, workouts){
       volDelta: thisVol-lastVol,
       maxDelta: thisMax-lastMax,
       hasData: thisWeek.length>0||lastWeek.length>0,
+      lastWeight,lastReps,nextWeight,nextNote,
     };
   });
   return results;
@@ -1682,19 +1723,25 @@ function OverloadCard({allLogs,workouts}){
         const up=e.e1rmDelta>0;const down=e.e1rmDelta<0;const same=e.e1rmDelta===0;
         const color=up?'#34d399':down?'#f87171':'#94a3b8';
         const arrow=up?'\u2191':down?'\u2193':'\u2192';
-        return React.createElement('div',{key:e.name,style:{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:'1px solid '+T.border}},
-          React.createElement('div',{style:{fontSize:14,color,fontWeight:800,width:16,textAlign:'center',flexShrink:0}},arrow),
-          React.createElement('div',{style:{flex:1,minWidth:0}},
-            React.createElement('div',{style:{fontSize:13,fontWeight:600,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},e.name),
-            React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1}},
-              e.lastWeek.sets>0?('Last: '+e.lastWeek.max+'lb \u00d7 '+Math.round(e.lastWeek.vol/e.lastWeek.sets/e.lastWeek.max||1)+' avg reps'):'New this week'
+        return React.createElement('div',{key:e.name,style:{padding:'10px 0',borderTop:'1px solid '+T.border}},
+          React.createElement('div',{style:{display:'flex',alignItems:'center',gap:10,marginBottom:e.nextWeight!==null?6:0}},
+            React.createElement('div',{style:{fontSize:14,color,fontWeight:800,width:16,textAlign:'center',flexShrink:0}},arrow),
+            React.createElement('div',{style:{flex:1,minWidth:0}},
+              React.createElement('div',{style:{fontSize:13,fontWeight:600,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},e.name),
+              React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1}},
+                e.lastWeek.sets>0?('Last: '+e.lastWeek.max+'lb \u00d7 '+Math.round(e.lastWeek.vol/e.lastWeek.sets/(e.lastWeek.max||1)||1)+' avg reps'):'New this week'
+              )
+            ),
+            React.createElement('div',{style:{textAlign:'right',flexShrink:0}},
+              e.thisWeek.max>0&&React.createElement('div',{style:{fontSize:13,fontWeight:700,color,fontFamily:T.mono}},
+                (up&&e.e1rmDelta>0?'+':'')+e.e1rmDelta+' e1RM'
+              ),
+              React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1}},e.thisWeek.sets+' sets')
             )
           ),
-          React.createElement('div',{style:{textAlign:'right',flexShrink:0}},
-            e.thisWeek.max>0&&React.createElement('div',{style:{fontSize:13,fontWeight:700,color,fontFamily:T.mono}},
-              (up&&e.e1rmDelta>0?'+':'')+e.e1rmDelta+' e1RM'
-            ),
-            React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1}},e.thisWeek.sets+' sets')
+          e.nextWeight!==null&&e.nextWeight!==undefined&&React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 10px',background:'rgba(124,58,237,0.08)',borderRadius:7,marginLeft:26}},
+            React.createElement('div',{style:{fontSize:11,color:T.dim}},e.nextNote||'Next session'),
+            React.createElement('div',{style:{fontSize:13,fontWeight:700,color:'#a78bfa',fontFamily:T.mono}},e.nextWeight+'lb')
           )
         );
       })
