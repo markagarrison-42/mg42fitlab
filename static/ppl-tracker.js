@@ -56,6 +56,39 @@ async function saveServerSchedule(scheduleData){
     await supabase.from('fitlog_schedule').upsert({user_id:user.id,data:scheduleData,updated_at:new Date().toISOString()},{onConflict:'user_id'});
   }catch{}
 }
+async function fetchProfile(){
+  try{
+    const{data,error}=await supabase.from('fitlog_profile').select('data').maybeSingle();
+    if(error||!data)return null;
+    return data.data;
+  }catch{return null;}
+}
+async function saveProfile(profile){
+  try{
+    const{data:{user}}=await supabase.auth.getUser();
+    if(!user)return;
+    await supabase.from('fitlog_profile').upsert({user_id:user.id,data:profile,updated_at:new Date().toISOString()},{onConflict:'user_id'});
+  }catch{}
+}
+async function fetchProteinLog(dateStr){
+  try{
+    const{data,error}=await supabase.from('fitlog_protein_logs').select('entries').eq('log_date',dateStr).maybeSingle();
+    if(error||!data)return [];
+    return data.entries||[];
+  }catch{return [];}
+}
+async function saveProteinLog(dateStr,entries){
+  try{
+    const{data:{user}}=await supabase.auth.getUser();
+    if(!user)return;
+    await supabase.from('fitlog_protein_logs').upsert({user_id:user.id,log_date:dateStr,entries:entries,updated_at:new Date().toISOString()},{onConflict:'user_id,log_date'});
+  }catch{}
+}
+function localDateStr(d){
+  const dt=d||new Date();
+  return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+}
+
 async function fetchBodyPartOverrides(){
   try{
     const{data,error}=await supabase.from('fitlog_bodypart_overrides').select('data').maybeSingle();
@@ -281,16 +314,19 @@ function WeeklyVolumeCard({allLogs,customBp,setCustomBp}){
   const[collapsed,setCollapsed]=useState(false);
   const[expandedBp,setExpandedBp]=useState(null);
   const[editingEx,setEditingEx]=useState(null);
+  const[weekOffset,setWeekOffset]=useState(0); // 0=current week, -1=last week, etc.
   // Store body part overrides in React state so changes immediately trigger re-render
 
   // tick forces re-read of localStorage overrides after saving a body part change
-  var _vd=getWeeklyVolume(allLogs,new Date(),customBp);
+  var refDate=new Date();refDate.setDate(refDate.getDate()+weekOffset*7);
+  var _vd=getWeeklyVolume(allLogs,refDate,customBp);
   var byBodyPart=_vd.byBodyPart;
   var byExercise=_vd.byExercise;
   const bodyPartOrder=['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Calves','Glutes','Traps','Core'];
   const entries=bodyPartOrder.filter(function(bp){return byBodyPart[bp]||TARGET_VOLUME.hasOwnProperty(bp);});
-  const{start,end}=getWeekRange(new Date());
+  const{start,end}=getWeekRange(refDate);
   const endDisplay=new Date(end.getTime()-1);
+  const isCurrentWeek=weekOffset===0;
   const rangeLabel=start.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' \u2013 '+endDisplay.toLocaleDateString('en-US',{month:'short',day:'numeric'});
   const BPOPTS=['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes','Calves','Core','Traps'];
   if(!entries.length)return null;
@@ -330,10 +366,14 @@ function WeeklyVolumeCard({allLogs,customBp,setCustomBp}){
     React.createElement('div',{onClick:function(){setCollapsed(function(v){return !v;});},style:{padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},
       React.createElement('div',{style:{fontSize:16}},'\uD83D\uDCCA'),
       React.createElement('div',{style:{flex:1}},
-        React.createElement('div',{style:{fontSize:13,fontWeight:700,color:T.text}},'Weekly Volume'),
+        React.createElement('div',{style:{fontSize:13,fontWeight:700,color:T.text}},isCurrentWeek?'Weekly Volume':'Weekly Volume \u2014 '+Math.abs(weekOffset)+' week'+(Math.abs(weekOffset)>1?'s':'')+' ago'),
         React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1}},rangeLabel)
       ),
-      React.createElement('div',{style:{fontSize:13,color:T.dim}},collapsed?'\u2304':'\u2303')
+      React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6}},
+        React.createElement('button',{onClick:function(e){e.stopPropagation();setWeekOffset(function(o){return o-1;});if(collapsed)setCollapsed(false);},style:{width:28,height:28,borderRadius:7,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:16,cursor:'pointer',WebkitTapHighlightColor:'transparent',lineHeight:1}},'\u2039'),
+        !isCurrentWeek&&React.createElement('button',{onClick:function(e){e.stopPropagation();setWeekOffset(function(o){return Math.min(o+1,0);});},style:{width:28,height:28,borderRadius:7,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:16,cursor:'pointer',WebkitTapHighlightColor:'transparent',lineHeight:1}},'\u203a'),
+        React.createElement('div',{style:{fontSize:13,color:T.dim,marginLeft:2}},collapsed?'\u2304':'\u2303')
+      )
     ),
     !collapsed&&React.createElement('div',{style:{padding:'0 16px 14px'}},
       entries.map(function(bp){
@@ -1749,6 +1789,171 @@ function OverloadCard({allLogs,workouts}){
   );
 }
 
+// ── PROTEIN TRACKER ────────────────────────────────────────────────────────────
+function ProteinCard({profile,onSaveProfile}){
+  const[collapsed,setCollapsed]=useState(false);
+  const[dayOffset,setDayOffset]=useState(0);
+  const[entries,setEntries]=useState([]);
+  const[loading,setLoading]=useState(true);
+  const[showAdd,setShowAdd]=useState(false);
+  const[mealText,setMealText]=useState('');
+  const[manualGrams,setManualGrams]=useState('');
+  const[estimating,setEstimating]=useState(false);
+  const[estError,setEstError]=useState('');
+  const[showSetup,setShowSetup]=useState(false);
+  const[weightInput,setWeightInput]=useState('');
+  const[unitInput,setUnitInput]=useState('lb');
+
+  const refDate=new Date();refDate.setDate(refDate.getDate()+dayOffset);
+  const dateStr=localDateStr(refDate);
+  const isToday=dayOffset===0;
+
+  // Load entries for the selected date
+  useEffect(function(){
+    setLoading(true);
+    fetchProteinLog(dateStr).then(function(e){setEntries(e||[]);setLoading(false);}).catch(function(){setEntries([]);setLoading(false);});
+  },[dateStr]);
+
+  const bodyweight=profile&&profile.bodyweight?profile.bodyweight:null;
+  const unit=profile&&profile.weightUnit?profile.weightUnit:'lb';
+  // Target: 1g per lb, or 2.2g per kg
+  const target=bodyweight?(unit==='kg'?Math.round(bodyweight*2.2):Math.round(bodyweight)):null;
+  const total=entries.reduce(function(t,e){return t+(e.grams||0);},0);
+  const pct=target?Math.min(100,Math.round((total/target)*100)):0;
+  const color=!target?T.muted:(total>=target?'#34d399':total>=target*0.75?'#fbbf24':'#f87171');
+
+  const dateLabel=isToday?'Today':(dayOffset===-1?'Yesterday':refDate.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}));
+
+  function persist(next){
+    setEntries(next);
+    saveProteinLog(dateStr,next);
+  }
+
+  async function estimateMeal(){
+    if(!mealText.trim())return;
+    setEstimating(true);setEstError('');
+    try{
+      const session=await supabase.auth.getSession();
+      const token=(session.data&&session.data.session)?session.data.session.access_token:'';
+      const resp=await fetch('/api/estimate-protein',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+        body:JSON.stringify({meal:mealText})
+      });
+      const data=await resp.json();
+      if(data.error){setEstError(data.error);setEstimating(false);return;}
+      const next=entries.concat([{label:mealText,grams:data.grams,note:data.breakdown||'',ts:Date.now()}]);
+      persist(next);
+      setMealText('');setShowAdd(false);setEstimating(false);
+    }catch(err){
+      setEstError('Estimate failed: '+err.message);setEstimating(false);
+    }
+  }
+
+  function addManual(){
+    const g=parseInt(manualGrams);
+    if(!g||g<=0)return;
+    const next=entries.concat([{label:mealText.trim()||'Manual entry',grams:g,note:'',ts:Date.now()}]);
+    persist(next);
+    setManualGrams('');setMealText('');setShowAdd(false);
+  }
+
+  function removeEntry(ts){
+    persist(entries.filter(function(e){return e.ts!==ts;}));
+  }
+
+  // Setup screen if no bodyweight set
+  if(showSetup||!bodyweight){
+    return React.createElement('div',{style:{margin:'0 16px 12px',background:T.bg2,borderRadius:14,border:'1px solid '+T.border,padding:'16px'}},
+      React.createElement('div',{style:{fontSize:14,fontWeight:700,color:T.text,marginBottom:4}},'Protein Tracker Setup'),
+      React.createElement('div',{style:{fontSize:12,color:T.dim,marginBottom:14,lineHeight:1.5}},'Enter your bodyweight to calculate your daily protein target (1g per lb).'),
+      React.createElement('div',{style:{display:'flex',gap:8,marginBottom:12}},
+        React.createElement('input',{
+          type:'number',inputMode:'decimal',placeholder:'Weight',
+          value:weightInput,onChange:function(e){setWeightInput(e.target.value);},
+          style:{flex:1,padding:'11px 14px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:9,color:T.text,fontSize:15,fontFamily:T.mono}
+        }),
+        React.createElement('div',{style:{display:'flex',gap:4}},
+          ['lb','kg'].map(function(u){
+            const active=unitInput===u;
+            return React.createElement('button',{key:u,onClick:function(){setUnitInput(u);},style:{padding:'11px 16px',borderRadius:9,border:'1px solid '+(active?'rgba(124,58,237,0.5)':T.border2),background:active?'rgba(124,58,237,0.2)':'transparent',color:active?'#a78bfa':T.sub,fontSize:14,fontWeight:active?700:400,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},u);
+          })
+        )
+      ),
+      weightInput&&React.createElement('div',{style:{fontSize:12,color:T.muted,marginBottom:12}},'Daily target: '+(unitInput==='kg'?Math.round(parseFloat(weightInput)*2.2):Math.round(parseFloat(weightInput)))+'g protein'),
+      React.createElement('div',{style:{display:'flex',gap:8}},
+        bodyweight&&React.createElement('button',{onClick:function(){setShowSetup(false);},style:{flex:1,padding:12,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:14,cursor:'pointer'}},'Cancel'),
+        React.createElement('button',{
+          onClick:function(){
+            const w=parseFloat(weightInput);
+            if(!w||w<=0)return;
+            const next=Object.assign({},profile||{},{bodyweight:w,weightUnit:unitInput});
+            onSaveProfile(next);
+            setShowSetup(false);
+          },
+          disabled:!weightInput,
+          style:{flex:2,padding:12,borderRadius:9,border:'none',background:weightInput?GRAD.button:'rgba(124,58,237,0.2)',color:'#fff',fontWeight:700,fontSize:14,cursor:weightInput?'pointer':'default'}
+        },'Save')
+      )
+    );
+  }
+
+  return React.createElement('div',{style:{margin:'0 16px 12px',background:T.bg2,borderRadius:14,border:'1px solid '+T.border,overflow:'hidden'}},
+    React.createElement('div',{onClick:function(){setCollapsed(function(v){return !v;});},style:{padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},
+      React.createElement('div',{style:{fontSize:16}},'\uD83E\uDD69'),
+      React.createElement('div',{style:{flex:1}},
+        React.createElement('div',{style:{fontSize:13,fontWeight:700,color:T.text}},'Protein'+(isToday?'':' \u2014 '+dateLabel)),
+        React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1}},total+' / '+target+'g')
+      ),
+      React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6}},
+        React.createElement('button',{onClick:function(e){e.stopPropagation();setDayOffset(function(o){return o-1;});if(collapsed)setCollapsed(false);},style:{width:28,height:28,borderRadius:7,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:16,cursor:'pointer',WebkitTapHighlightColor:'transparent',lineHeight:1}},'\u2039'),
+        !isToday&&React.createElement('button',{onClick:function(e){e.stopPropagation();setDayOffset(function(o){return Math.min(o+1,0);});},style:{width:28,height:28,borderRadius:7,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:16,cursor:'pointer',WebkitTapHighlightColor:'transparent',lineHeight:1}},'\u203a'),
+        React.createElement('div',{style:{fontSize:13,color:T.dim,marginLeft:2}},collapsed?'\u2304':'\u2303')
+      )
+    ),
+    !collapsed&&React.createElement('div',{style:{padding:'0 16px 14px'}},
+      React.createElement('div',{style:{height:6,borderRadius:3,background:'rgba(148,163,184,0.12)',overflow:'hidden',marginBottom:12}},
+        React.createElement('div',{style:{height:'100%',width:pct+'%',background:color,borderRadius:3,transition:'width 0.4s ease'}})
+      ),
+      loading&&React.createElement('div',{style:{fontSize:12,color:T.dim,textAlign:'center',padding:'8px 0'}},'Loading...'),
+      !loading&&entries.length===0&&React.createElement('div',{style:{fontSize:12,color:T.dim,textAlign:'center',padding:'10px 0'}},'No meals logged'),
+      !loading&&entries.map(function(e){
+        return React.createElement('div',{key:e.ts,style:{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:'1px solid '+T.border}},
+          React.createElement('div',{style:{flex:1,minWidth:0}},
+            React.createElement('div',{style:{fontSize:13,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},e.label),
+            e.note&&React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},e.note)
+          ),
+          React.createElement('div',{style:{fontSize:13,fontWeight:700,color:T.sub,fontFamily:T.mono,flexShrink:0}},e.grams+'g'),
+          React.createElement('button',{onClick:function(){removeEntry(e.ts);},style:{width:22,height:22,borderRadius:5,border:'none',background:'rgba(239,68,68,0.12)',color:'#f87171',fontSize:13,cursor:'pointer',flexShrink:0,lineHeight:1,WebkitTapHighlightColor:'transparent'}},'\u00d7')
+        );
+      }),
+      !showAdd&&React.createElement('div',{style:{display:'flex',gap:8,marginTop:10}},
+        React.createElement('button',{onClick:function(){setShowAdd(true);},style:{flex:1,padding:10,borderRadius:9,border:'none',background:GRAD.button,color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'+ Log Meal'),
+        React.createElement('button',{onClick:function(){setWeightInput(String(bodyweight));setUnitInput(unit);setShowSetup(true);},style:{padding:'10px 12px',borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.dim,fontSize:12,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'\u2699')
+      ),
+      showAdd&&React.createElement('div',{style:{marginTop:10}},
+        React.createElement('textarea',{
+          value:mealText,
+          onChange:function(e){setMealText(e.target.value);},
+          placeholder:'e.g. 8oz grilled chicken, 1 cup rice, broccoli',
+          style:{width:'100%',minHeight:64,padding:'10px 12px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:9,color:T.text,fontSize:13,fontFamily:T.sans,lineHeight:1.5,resize:'vertical',marginBottom:8}
+        }),
+        estError&&React.createElement('div',{style:{padding:'8px 10px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:7,fontSize:12,color:'#f87171',marginBottom:8}},estError),
+        React.createElement('div',{style:{display:'flex',gap:8,marginBottom:8}},
+          React.createElement('input',{
+            type:'number',inputMode:'numeric',placeholder:'grams',
+            value:manualGrams,onChange:function(e){setManualGrams(e.target.value);},
+            style:{width:90,padding:'10px 12px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:9,color:T.text,fontSize:13,fontFamily:T.mono}
+          }),
+          React.createElement('button',{onClick:addManual,disabled:!manualGrams,style:{padding:'10px 14px',borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:manualGrams?T.sub:T.dim,fontSize:13,cursor:manualGrams?'pointer':'default'}},'Add manually'),
+          React.createElement('button',{onClick:estimateMeal,disabled:!mealText.trim()||estimating,style:{flex:1,padding:'10px 12px',borderRadius:9,border:'none',background:(mealText.trim()&&!estimating)?GRAD.button:'rgba(124,58,237,0.2)',color:'#fff',fontWeight:700,fontSize:13,cursor:(mealText.trim()&&!estimating)?'pointer':'default'}},estimating?'Estimating...':'\u2728 Estimate')
+        ),
+        React.createElement('button',{onClick:function(){setShowAdd(false);setMealText('');setManualGrams('');setEstError('');},style:{width:'100%',padding:9,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.dim,fontSize:12,cursor:'pointer'}},'Cancel')
+      )
+    )
+  );
+}
+
 // ── DASHBOARD TAB ──────────────────────────────────────────────────────────────
 function DashboardTab({allLogs,workouts,schedule,restDefaults,customBp,setCustomBp}){
   const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -1784,6 +1989,7 @@ function DashboardTab({allLogs,workouts,schedule,restDefaults,customBp,setCustom
 
     // Weekly volume
     React.createElement(WeeklyVolumeCard,{allLogs,customBp,setCustomBp}),
+
 
     // Progressive overload
     React.createElement(OverloadCard,{allLogs,workouts}),
@@ -1921,6 +2127,7 @@ function PPLTracker(){
   const[restDefaults,setRestDefaultsRaw]=useState(loadRestDefaults);
   const[allLogs,setAllLogs]=useState({});
   const[customBp,setCustomBp]=useState(function(){return loadLS('fitlog_custom_bodypart',{});});
+  const[profile,setProfileRaw]=useState(function(){return loadLS('fitlog_profile',{});});
   const[tab,setTab]=useState('dashboard');
   const[editingSchedule,setEditingSchedule]=useState(false);
   const[editingSettings,setEditingSettings]=useState(false);
@@ -1956,6 +2163,12 @@ function PPLTracker(){
       }else{saveServerRestDefaults(restDefaults);}
     }).catch(()=>{});
 
+    fetchProfile().then(function(data){
+      if(data&&Object.keys(data).length>0){
+        setProfileRaw(data);saveLS('fitlog_profile',data);
+      }
+    }).catch(function(){});
+
     fetchBodyPartOverrides().then(function(data){
       var local=loadLS('fitlog_custom_bodypart',{});
       var hasLocal=Object.keys(local).length>0;
@@ -1973,6 +2186,7 @@ function PPLTracker(){
     }).catch(function(){});
   },[]);
 
+  function setProfile(p){setProfileRaw(p);saveLS('fitlog_profile',p);saveProfile(p);}
   function setWorkouts(w){setWorkoutsRaw(w);saveLS('fitlog_workouts',w);saveServerWorkouts(w);}
   function setSchedule(w){setScheduleRaw(w);saveLS('fitlog_schedule',w);saveServerSchedule(w);}
   function setRestDefaults(d){setRestDefaultsRaw(d);saveLS('fitlog_rest_defaults',d);saveServerRestDefaults(d);}
@@ -2098,10 +2312,10 @@ function PPLTracker(){
   const TabBar=()=>React.createElement('div',{style:{position:'fixed',bottom:0,left:0,right:0,zIndex:100,background:T.bg,borderTop:'1px solid '+T.border,display:'flex',paddingBottom:'env(safe-area-inset-bottom)'}},
     [
       {id:'dashboard',label:'Dashboard',icon:'\uD83C\uDFCB'},
-      {id:'history',label:'History',icon:'\uD83D\uDCCB'},
+      {id:'daily',label:'Daily',icon:'\uD83E\uDD69'},
       {id:'schedule',label:'Schedule',icon:'\uD83D\uDCC6'},
       {id:'routines',label:'Routines',icon:'\uD83D\uDCAF'},
-      {id:'settings',label:'Settings',icon:'\u2699\uFE0F'},
+      {id:'history',label:'History',icon:'\uD83D\uDCCB'},
     ].map(({id,label,icon})=>React.createElement('button',{key:id,onClick:()=>setTab(id),style:{flex:1,padding:'10px 4px 8px',border:'none',background:'none',color:tab===id?accent:T.dim,fontSize:10,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:3,WebkitTapHighlightColor:'transparent',fontFamily:T.sans}},
       React.createElement('div',{style:{fontSize:20}},icon),
       React.createElement('div',{style:{fontWeight:tab===id?700:400}},label)
@@ -2113,7 +2327,7 @@ function PPLTracker(){
     React.createElement('div',{style:{position:'sticky',top:0,zIndex:10,backdropFilter:'blur(16px)',borderBottom:'1px solid '+T.border,padding:'0 16px',background:'linear-gradient(180deg,'+T.bg+'f8 0%,'+T.bg+'e0 100%)'}},
       React.createElement('div',{style:{position:'relative',display:'flex',alignItems:'center',justifyContent:'center',paddingTop:18,paddingBottom:14}},
         React.createElement('div',{style:{fontSize:30,fontFamily:"'Anton',sans-serif",transform:'skewX(-8deg)',background:GRAD.accent,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',letterSpacing:'0.01em',textTransform:'uppercase'}},'FitLog'),
-        React.createElement('button',{onClick:()=>supabase.auth.signOut(),style:{position:'absolute',right:0,width:38,height:38,borderRadius:10,border:'1px solid '+T.border2,background:'rgba(255,255,255,0.03)',color:T.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,WebkitTapHighlightColor:'transparent'}},'\u238b')
+        React.createElement('button',{onClick:function(){setTab('settings');},style:{position:'absolute',right:0,width:38,height:38,borderRadius:10,border:'1px solid '+T.border2,background:'rgba(255,255,255,0.03)',color:T.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,WebkitTapHighlightColor:'transparent'}},'\u2699')
       )
     ),
 
@@ -2151,6 +2365,13 @@ function PPLTracker(){
       }
     }),
 
+    tab==='daily'&&React.createElement('div',{style:{paddingBottom:100}},
+      React.createElement('div',{style:{padding:'16px 16px 12px'}},
+        React.createElement('div',{style:{fontSize:20,fontWeight:700,color:T.text}},'Daily')
+      ),
+      React.createElement(ProteinCard,{profile,onSaveProfile:setProfile})
+    ),
+
     tab==='schedule'&&React.createElement(ScheduleTab,{
       schedule,
       workouts,
@@ -2158,7 +2379,10 @@ function PPLTracker(){
     }),
 
     tab==='settings'&&React.createElement('div',{style:{padding:'16px 16px 100px'}},
-      React.createElement('div',{style:{fontSize:20,fontWeight:700,color:T.text,marginBottom:16}},'Settings'),
+      React.createElement('div',{style:{display:'flex',alignItems:'center',gap:12,marginBottom:16}},
+        React.createElement('button',{onClick:function(){setTab('dashboard');},style:{width:36,height:36,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:18,cursor:'pointer',flexShrink:0,WebkitTapHighlightColor:'transparent'}},'<'),
+        React.createElement('div',{style:{fontSize:20,fontWeight:700,color:T.text}},'Settings')
+      ),
 
       // Import section
       React.createElement('div',{style:{background:T.bg2,borderRadius:12,padding:16,marginBottom:12,border:'1px solid '+T.border}},
