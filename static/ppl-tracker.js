@@ -1955,7 +1955,7 @@ function ProteinCard({profile,onSaveProfile}){
 }
 
 // ── DASHBOARD TAB ──────────────────────────────────────────────────────────────
-function DashboardTab({allLogs,workouts,schedule,restDefaults,customBp,setCustomBp}){
+function DashboardTab({allLogs,workouts,schedule,restDefaults,customBp,setCustomBp,onNavigate}){
   const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const today=days[new Date().getDay()];
   const todayItem=schedule.find(s=>s.day===today);
@@ -1972,6 +1972,53 @@ function DashboardTab({allLogs,workouts,schedule,restDefaults,customBp,setCustom
     if(thisWeek.length) recentPRs.push({exId,name:entries[0].exName||exId.replace(/_/g,' '),e1rm:maxE1rm,date:thisWeek[0].date});
   });
   recentPRs.sort((a,b)=>new Date(b.date)-new Date(a.date));
+
+  // ── EMPTY STATE: no imported history yet ──────────────────────────────────
+  var loggedSetCount=0;
+  Object.keys(allLogs).forEach(function(k){
+    var arr=allLogs[k];
+    if(arr&&arr.length)loggedSetCount+=arr.filter(function(e){return e.weight>0||e.reps>0;}).length;
+  });
+
+  if(loggedSetCount===0){
+    var steps=[
+      {n:'1',title:'Log your workouts in Strong',body:'Keep training exactly as you do now. FitLog reads what Strong already records.'},
+      {n:'2',title:'Export a CSV from Strong',body:'In Strong: Settings \u2192 Export Data \u2192 Export. Save the file to your device.'},
+      {n:'3',title:'Import it here',body:'Bring that file into FitLog and your volume, PRs and overload fill in automatically.'}
+    ];
+    return React.createElement('div',{style:{paddingBottom:100}},
+      React.createElement('div',{style:{margin:'20px 16px 14px',padding:'22px 20px',background:'linear-gradient(135deg,rgba(124,58,237,0.16),rgba(6,182,212,0.06))',borderRadius:18,border:'1px solid rgba(124,58,237,0.32)'}},
+        React.createElement('div',{style:{fontSize:26,marginBottom:10}},'\uD83D\uDCC8'),
+        React.createElement('div',{style:{fontSize:21,fontWeight:800,color:T.text,letterSpacing:'-0.02em',marginBottom:7}},'Welcome to FitLog'),
+        React.createElement('div',{style:{fontSize:14,color:T.sub,lineHeight:1.6}},'FitLog is a companion for the Strong app. It turns your logged workouts into weekly volume, progressive overload and PR tracking.')
+      ),
+      React.createElement('div',{style:{margin:'0 16px 14px'}},
+        React.createElement('div',{style:{fontSize:11,fontWeight:700,color:T.dim,textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:12,paddingLeft:2}},'Get started'),
+        steps.map(function(s){
+          return React.createElement('div',{key:s.n,style:{display:'flex',gap:14,padding:'14px 16px',marginBottom:8,background:T.bg2,borderRadius:12,border:'1px solid '+T.border}},
+            React.createElement('div',{style:{width:26,height:26,borderRadius:13,background:'rgba(124,58,237,0.18)',color:'#a78bfa',fontSize:13,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontFamily:T.mono}},s.n),
+            React.createElement('div',{style:{flex:1,minWidth:0}},
+              React.createElement('div',{style:{fontSize:14,fontWeight:600,color:T.text,marginBottom:3}},s.title),
+              React.createElement('div',{style:{fontSize:12,color:T.dim,lineHeight:1.55}},s.body)
+            )
+          );
+        })
+      ),
+      React.createElement('div',{style:{margin:'0 16px 16px'}},
+        React.createElement('button',{
+          onClick:function(){if(onNavigate)onNavigate('settings');},
+          style:{width:'100%',padding:15,borderRadius:12,border:'none',background:GRAD.button,color:'#fff',fontWeight:700,fontSize:15,cursor:'pointer',WebkitTapHighlightColor:'transparent',minHeight:52}
+        },'Import from Strong')
+      ),
+      React.createElement('div',{style:{margin:'0 16px',padding:'14px 16px',background:T.bg2,borderRadius:12,border:'1px solid '+T.border}},
+        React.createElement('div',{style:{fontSize:13,color:T.sub,lineHeight:1.6,marginBottom:10}},'No Strong data yet? You can still browse the starter routines and set up your weekly schedule.'),
+        React.createElement('div',{style:{display:'flex',gap:8}},
+          React.createElement('button',{onClick:function(){if(onNavigate)onNavigate('routines');},style:{flex:1,padding:11,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:13,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'View Routines'),
+          React.createElement('button',{onClick:function(){if(onNavigate)onNavigate('schedule');},style:{flex:1,padding:11,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:13,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'Set Schedule')
+        )
+      )
+    );
+  }
 
   return React.createElement('div',{style:{paddingBottom:80}},
     // Today's workout reference card
@@ -2332,7 +2379,7 @@ function PPLTracker(){
     ),
 
     // Tab content
-    tab==='dashboard'&&React.createElement(DashboardTab,{allLogs,workouts,schedule,restDefaults,customBp,setCustomBp}),
+    tab==='dashboard'&&React.createElement(DashboardTab,{allLogs,workouts,schedule,restDefaults,customBp,setCustomBp,onNavigate:setTab}),
 
     tab==='history'&&React.createElement(HistoryView,{
       allLogs,workouts,
