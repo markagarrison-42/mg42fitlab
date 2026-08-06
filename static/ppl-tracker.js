@@ -1,4 +1,4 @@
-// FitLog v2.1 — Titan Protocol + Traps
+// FitLog v2.2 — Macro tracker
 const { useState, useEffect, useRef } = React;
 
 // ── SUPABASE CLIENT ────────────────────────────────────────────────────────────
@@ -1803,6 +1803,12 @@ function MacroCard({profile,onSaveProfile}){
   const[mFat,setMFat]=useState('');
   const[estimating,setEstimating]=useState(false);
   const[estError,setEstError]=useState('');
+  const[editTs,setEditTs]=useState(null);
+  const[eCal,setECal]=useState('');
+  const[ePro,setEPro]=useState('');
+  const[eCarb,setECarb]=useState('');
+  const[eFat,setEFat]=useState('');
+  const[eLabel,setELabel]=useState('');
   const[showSetup,setShowSetup]=useState(false);
   const[wIn,setWIn]=useState('');
   const[unitIn,setUnitIn]=useState('lb');
@@ -1871,6 +1877,24 @@ function MacroCard({profile,onSaveProfile}){
   }
 
   function removeEntry(ts){persist(entries.filter(function(e){return e.ts!==ts;}));}
+
+  function openEdit(e){
+    setEditTs(e.ts);
+    setELabel(e.label||'');
+    setECal(String(e.calories||0));
+    setEPro(String(e.protein||e.grams||0));
+    setECarb(String(e.carbs||0));
+    setEFat(String(e.fat||0));
+  }
+  function saveEdit(){
+    var cal=parseInt(eCal)||0,pro=parseInt(ePro)||0,carb=parseInt(eCarb)||0,fat=parseInt(eFat)||0;
+    if(!cal)cal=pro*4+carb*4+fat*9;
+    persist(entries.map(function(e){
+      if(e.ts!==editTs)return e;
+      return Object.assign({},e,{label:eLabel.trim()||e.label,calories:cal,protein:pro,carbs:carb,fat:fat});
+    }));
+    setEditTs(null);
+  }
 
   if(showSetup||!bw||!calTarget){
     var prevCal=wIn?(unitIn==='kg'?Math.round(parseFloat(wIn)*2.205):Math.round(parseFloat(wIn))):null;
@@ -1952,13 +1976,29 @@ function MacroCard({profile,onSaveProfile}){
       loading&&React.createElement('div',{style:{fontSize:12,color:T.dim,textAlign:'center',padding:'8px 0'}},'Loading...'),
       !loading&&entries.length===0&&React.createElement('div',{style:{fontSize:12,color:T.dim,textAlign:'center',padding:'10px 0'}},'No meals logged'),
       !loading&&entries.map(function(e){
+        if(editTs===e.ts){
+          return React.createElement('div',{key:e.ts,style:{padding:'10px 0',borderTop:'1px solid '+T.border}},
+            React.createElement('input',{type:'text',value:eLabel,onChange:function(ev){setELabel(ev.target.value);},placeholder:'Meal name',style:{width:'100%',padding:'9px 11px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:8,color:T.text,fontSize:13,fontFamily:T.sans,marginBottom:7}}),
+            React.createElement('div',{style:{display:'flex',gap:6,marginBottom:8}},
+              [{p:'cal',v:eCal,s:setECal},{p:'protein',v:ePro,s:setEPro},{p:'carbs',v:eCarb,s:setECarb},{p:'fat',v:eFat,s:setEFat}].map(function(f){
+                return React.createElement('input',{key:f.p,type:'number',inputMode:'numeric',placeholder:f.p,value:f.v,onChange:function(ev){f.s(ev.target.value);},style:{flex:1,minWidth:0,padding:'9px 6px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:8,color:T.text,fontSize:12,fontFamily:T.mono,textAlign:'center'}});
+              })
+            ),
+            React.createElement('div',{style:{display:'flex',gap:7}},
+              React.createElement('button',{onClick:function(){setEditTs(null);},style:{flex:1,padding:9,borderRadius:8,border:'1px solid '+T.border2,background:'transparent',color:T.dim,fontSize:12,cursor:'pointer'}},'Cancel'),
+              React.createElement('button',{onClick:saveEdit,style:{flex:2,padding:9,borderRadius:8,border:'none',background:GRAD.button,color:'#fff',fontWeight:700,fontSize:12,cursor:'pointer'}},'Save')
+            )
+          );
+        }
         return React.createElement('div',{key:e.ts,style:{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:'1px solid '+T.border}},
-          React.createElement('div',{style:{flex:1,minWidth:0}},
+          React.createElement('div',{onClick:function(){openEdit(e);},style:{flex:1,minWidth:0,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},
             React.createElement('div',{style:{fontSize:13,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},e.label),
             React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1,fontFamily:T.mono}},
               (e.calories||0)+'cal \u00b7 '+(e.protein||e.grams||0)+'p \u00b7 '+(e.carbs||0)+'c \u00b7 '+(e.fat||0)+'f'
-            )
+            ),
+            e.note&&React.createElement('div',{style:{fontSize:9,color:T.dim,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',opacity:0.8}},e.note)
           ),
+          React.createElement('button',{onClick:function(){openEdit(e);},style:{width:22,height:22,borderRadius:5,border:'1px solid '+T.border2,background:'transparent',color:T.dim,fontSize:10,cursor:'pointer',flexShrink:0,lineHeight:1,WebkitTapHighlightColor:'transparent'}},'\u270e'),
           React.createElement('button',{onClick:function(){removeEntry(e.ts);},style:{width:22,height:22,borderRadius:5,border:'none',background:'rgba(239,68,68,0.12)',color:'#f87171',fontSize:13,cursor:'pointer',flexShrink:0,lineHeight:1,WebkitTapHighlightColor:'transparent'}},'\u00d7')
         );
       }),
@@ -1979,6 +2019,120 @@ function MacroCard({profile,onSaveProfile}){
         React.createElement('button',{onClick:addManual,disabled:!(mCal||mPro||mCarb||mFat),style:{width:'100%',padding:10,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:(mCal||mPro||mCarb||mFat)?T.sub:T.dim,fontSize:13,cursor:(mCal||mPro||mCarb||mFat)?'pointer':'default',marginBottom:8}},'Add manually'),
         React.createElement('button',{onClick:function(){setShowAdd(false);setMealText('');setMCal('');setMPro('');setMCarb('');setMFat('');setEstError('');},style:{width:'100%',padding:9,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.dim,fontSize:12,cursor:'pointer'}},'Cancel')
       )
+    )
+  );
+}
+
+// ── BODYWEIGHT TRACKER ───────────────────────────────────────
+function BodyweightCard({profile,onSaveProfile}){
+  const[collapsed,setCollapsed]=useState(false);
+  const[adding,setAdding]=useState(false);
+  const[wIn,setWIn]=useState('');
+  const[dIn,setDIn]=useState('');
+
+  var unit=(profile&&profile.weightUnit)?profile.weightUnit:'lb';
+  var log=(profile&&profile.bodyweightLog)?profile.bodyweightLog.slice():[];
+  log.sort(function(a,b){return a.date<b.date?1:-1;});
+
+  var latest=log.length?log[0]:null;
+  var prev=log.length>1?log[1]:null;
+  var delta=(latest&&prev)?(latest.weight-prev.weight):null;
+
+  // 30-day trend
+  var cutoff=new Date();cutoff.setDate(cutoff.getDate()-30);
+  var recent=log.filter(function(e){return new Date(e.date)>=cutoff;});
+  var oldest30=recent.length?recent[recent.length-1]:null;
+  var trend30=(latest&&oldest30&&recent.length>1)?(latest.weight-oldest30.weight):null;
+
+  function addEntry(){
+    var w=parseFloat(wIn);
+    if(!w||w<=0)return;
+    var d=dIn||localDateStr(new Date());
+    var next=log.filter(function(e){return e.date!==d;});
+    next.push({date:d,weight:w});
+    next.sort(function(a,b){return a.date<b.date?1:-1;});
+    var upd=Object.assign({},profile||{},{bodyweightLog:next,weightUnit:unit});
+    upd.bodyweight=next[0].weight;
+    onSaveProfile(upd);
+    setWIn('');setDIn('');setAdding(false);
+  }
+
+  function removeEntry(date){
+    var next=log.filter(function(e){return e.date!==date;});
+    var upd=Object.assign({},profile||{},{bodyweightLog:next});
+    if(next.length)upd.bodyweight=next[0].weight;
+    onSaveProfile(upd);
+  }
+
+  return React.createElement('div',{style:{margin:'0 16px 12px',background:T.bg2,borderRadius:14,border:'1px solid '+T.border,overflow:'hidden'}},
+    React.createElement('div',{onClick:function(){setCollapsed(function(v){return !v;});},style:{padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},
+      React.createElement('div',{style:{fontSize:16}},'\u2696\uFE0F'),
+      React.createElement('div',{style:{flex:1}},
+        React.createElement('div',{style:{fontSize:13,fontWeight:700,color:T.text}},'Bodyweight'),
+        React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1}},latest?(latest.weight+unit+(delta!==null?'  '+(delta>0?'+':'')+delta.toFixed(1)+' vs last':'')):'No entries yet')
+      ),
+      React.createElement('div',{style:{fontSize:13,color:T.dim}},collapsed?'\u2304':'\u2303')
+    ),
+    !collapsed&&React.createElement('div',{style:{padding:'0 16px 14px'}},
+      latest&&React.createElement('div',{style:{display:'flex',gap:10,marginBottom:12}},
+        React.createElement('div',{style:{flex:1,padding:'10px 12px',background:T.bg3,borderRadius:9}},
+          React.createElement('div',{style:{fontSize:10,color:T.dim,marginBottom:2}},'Current'),
+          React.createElement('div',{style:{fontSize:17,fontWeight:700,color:T.text,fontFamily:T.mono}},latest.weight+unit)
+        ),
+        trend30!==null&&React.createElement('div',{style:{flex:1,padding:'10px 12px',background:T.bg3,borderRadius:9}},
+          React.createElement('div',{style:{fontSize:10,color:T.dim,marginBottom:2}},'30-day'),
+          React.createElement('div',{style:{fontSize:17,fontWeight:700,fontFamily:T.mono,color:trend30>0?'#fbbf24':trend30<0?'#38bdf8':T.sub}},(trend30>0?'+':'')+trend30.toFixed(1)+unit)
+        )
+      ),
+      log.length>1&&(function(){
+        var pts=log.slice(0,60).slice().reverse();
+        var ws=pts.map(function(e){return e.weight;});
+        var mn=Math.min.apply(null,ws), mx=Math.max.apply(null,ws);
+        var range=(mx-mn)||1;
+        var W=300, H=64, pad=4;
+        var coords=pts.map(function(e,i){
+          var x=pad+(pts.length===1?0:(i/(pts.length-1))*(W-pad*2));
+          var y=pad+(1-((e.weight-mn)/range))*(H-pad*2);
+          return [x,y];
+        });
+        var d=coords.map(function(pt,i){return (i===0?'M':'L')+pt[0].toFixed(1)+' '+pt[1].toFixed(1);}).join(' ');
+        var area=d+' L'+coords[coords.length-1][0].toFixed(1)+' '+(H-pad)+' L'+coords[0][0].toFixed(1)+' '+(H-pad)+' Z';
+        var first=pts[0].weight, last=pts[pts.length-1].weight;
+        var down=last<first;
+        var stroke=down?'#38bdf8':(last>first?'#fbbf24':'#94a3b8');
+        return React.createElement('div',{style:{marginBottom:12}},
+          React.createElement('svg',{viewBox:'0 0 '+W+' '+H,preserveAspectRatio:'none',style:{width:'100%',height:64,display:'block'}},
+            React.createElement('path',{d:area,fill:stroke,opacity:0.12}),
+            React.createElement('path',{d:d,fill:'none',stroke:stroke,strokeWidth:2,strokeLinejoin:'round',strokeLinecap:'round'}),
+            React.createElement('circle',{cx:coords[coords.length-1][0],cy:coords[coords.length-1][1],r:3,fill:stroke})
+          ),
+          React.createElement('div',{style:{display:'flex',justifyContent:'space-between',marginTop:3}},
+            React.createElement('div',{style:{fontSize:9,color:T.dim,fontFamily:T.mono}},pts[0].date),
+            React.createElement('div',{style:{fontSize:9,color:T.dim,fontFamily:T.mono}},mn.toFixed(1)+' \u2013 '+mx.toFixed(1)+unit),
+            React.createElement('div',{style:{fontSize:9,color:T.dim,fontFamily:T.mono}},pts[pts.length-1].date)
+          )
+        );
+      })(),
+      !adding&&React.createElement('button',{onClick:function(){setAdding(true);setWIn(latest?String(latest.weight):'');setDIn(localDateStr(new Date()));},style:{width:'100%',padding:10,borderRadius:9,border:'none',background:GRAD.button,color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer',WebkitTapHighlightColor:'transparent',marginBottom:log.length?12:0}},'+ Log Weight'),
+      adding&&React.createElement('div',{style:{marginBottom:12}},
+        React.createElement('input',{type:'date',value:dIn,max:localDateStr(new Date()),onChange:function(e){setDIn(e.target.value);},style:{width:'100%',padding:'11px 14px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:9,color:T.text,fontSize:14,fontFamily:T.mono,marginBottom:8}}),
+        React.createElement('div',{style:{display:'flex',gap:8,marginBottom:8}},
+          React.createElement('input',{type:'number',inputMode:'decimal',placeholder:'Weight ('+unit+')',value:wIn,onChange:function(e){setWIn(e.target.value);},style:{flex:1,padding:'11px 14px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:9,color:T.text,fontSize:15,fontFamily:T.mono}}),
+          React.createElement('button',{onClick:addEntry,disabled:!wIn,style:{padding:'11px 18px',borderRadius:9,border:'none',background:wIn?GRAD.button:'rgba(124,58,237,0.2)',color:'#fff',fontWeight:700,fontSize:14,cursor:wIn?'pointer':'default'}},'Save')
+        ),
+        React.createElement('button',{onClick:function(){setAdding(false);setWIn('');setDIn('');},style:{width:'100%',padding:9,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.dim,fontSize:12,cursor:'pointer'}},'Cancel')
+      ),
+      log.slice(0,10).map(function(e,i){
+        var p2=log[i+1];
+        var d=p2?(e.weight-p2.weight):null;
+        return React.createElement('div',{key:e.date,style:{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderTop:'1px solid '+T.border}},
+          React.createElement('div',{style:{flex:1,fontSize:12,color:T.sub,fontFamily:T.mono}},e.date),
+          d!==null&&React.createElement('div',{style:{fontSize:11,fontFamily:T.mono,color:d>0?'#fbbf24':d<0?'#38bdf8':T.dim}},(d>0?'+':'')+d.toFixed(1)),
+          React.createElement('div',{style:{fontSize:13,fontWeight:600,color:T.text,fontFamily:T.mono,minWidth:52,textAlign:'right'}},e.weight+unit),
+          React.createElement('button',{onClick:function(){removeEntry(e.date);},style:{width:20,height:20,borderRadius:5,border:'none',background:'rgba(239,68,68,0.12)',color:'#f87171',fontSize:12,cursor:'pointer',flexShrink:0,lineHeight:1,WebkitTapHighlightColor:'transparent'}},'\u00d7')
+        );
+      }),
+      log.length>10&&React.createElement('div',{style:{fontSize:10,color:T.dim,textAlign:'center',paddingTop:8}},'Showing 10 of '+log.length+' entries')
     )
   );
 }
@@ -2449,7 +2603,8 @@ function PPLTracker(){
       React.createElement('div',{style:{padding:'16px 16px 12px'}},
         React.createElement('div',{style:{fontSize:20,fontWeight:700,color:T.text}},'Daily')
       ),
-      React.createElement(MacroCard,{profile,onSaveProfile:setProfile})
+      React.createElement(MacroCard,{profile,onSaveProfile:setProfile}),
+      React.createElement(BodyweightCard,{profile,onSaveProfile:setProfile})
     ),
 
     tab==='schedule'&&React.createElement(ScheduleTab,{
