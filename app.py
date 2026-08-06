@@ -405,6 +405,32 @@ Output nothing except the JSON object."""
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ── DEPLOY WEBHOOK ─────────────────────────────────────────────
+@app.route("/api/deploy", methods=["POST"])
+def deploy():
+    import subprocess
+    secret = os.environ.get("DEPLOY_SECRET", "")
+    provided = request.headers.get("X-Deploy-Secret", "")
+    if not secret or provided != secret:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    repo = "/home/madfella/mg42fitlab"
+    try:
+        pull = subprocess.run(
+            ["git", "-C", repo, "pull", "--ff-only", "origin", "main"],
+            capture_output=True, text=True, timeout=60
+        )
+        if pull.returncode != 0:
+            return jsonify({"error": "git pull failed", "stderr": pull.stderr[:500]}), 500
+
+        # Touch the WSGI file to trigger a reload
+        wsgi = "/var/www/fitlog_mg42apps_com_wsgi.py"
+        os.utime(wsgi, None)
+
+        return jsonify({"status": "deployed", "output": pull.stdout[-300:]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # ── ENTRY POINT ───────────────────────────────────────────────────────────────
 application = app
 if __name__ == "__main__":
