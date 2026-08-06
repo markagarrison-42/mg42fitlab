@@ -1,0 +1,25 @@
+name: Deploy to PythonAnywhere
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger deploy webhook
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            https://fitlog.mg42apps.com/api/deploy \
+            -H "X-Deploy-Secret: ${{ secrets.DEPLOY_SECRET }}")
+          body=$(echo "$response" | head -n -1)
+          code=$(echo "$response" | tail -n 1)
+          echo "Response: $body"
+          echo "HTTP status: $code"
+          if [ "$code" != "200" ]; then
+            echo "Deploy failed"
+            exit 1
+          fi
+          echo "Deploy succeeded"
