@@ -1044,7 +1044,7 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
           React.createElement('div',{style:{fontSize:17,fontWeight:700,color:T.text}},w.label),
           React.createElement('div',{style:{fontSize:11,color:T.dim,marginTop:2}},totalSets+' sets total')
         ),
-        React.createElement('button',{onClick:function(){setViewingRoutine(null);setStrongFormat(viewingRoutine);},style:{padding:'7px 12px',borderRadius:8,border:'1px solid rgba(20,184,166,0.4)',background:'rgba(20,184,166,0.1)',color:'#5eead4',fontSize:12,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'Strong Format')
+        React.createElement('button',{onClick:function(){setViewingRoutine(null);setStrongFormat(viewingRoutine);},style:{padding:'7px 12px',borderRadius:8,border:'1px solid rgba(20,184,166,0.4)',background:'rgba(20,184,166,0.1)',color:'#5eead4',fontSize:12,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'Export to Strong')
       ),
       w.note&&React.createElement('div',{style:{margin:'12px 16px 0',padding:'10px 14px',background:T.bg2,borderRadius:10,border:'1px solid '+T.border,fontSize:13,color:T.muted,lineHeight:1.5}},w.note),
       React.createElement('div',{style:{padding:'12px 16px 100px'}},
@@ -1250,7 +1250,7 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
         React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,paddingTop:'env(safe-area-inset-top)'}},
           React.createElement('div',null,
             React.createElement('div',{style:{fontSize:18,fontWeight:700,color:T.text}},w.label),
-            React.createElement('div',{style:{fontSize:11,color:T.dim,marginTop:2}},'Strong template · '+folderName)
+            React.createElement('div',{style:{fontSize:11,color:T.dim,marginTop:2}},'Strong folder: '+folderName)
           ),
           React.createElement('button',{onClick:function(){setStrongFormat(null);},style:{padding:'8px 14px',borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:13,cursor:'pointer'}},'Close')
         ),
@@ -1286,7 +1286,7 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
         !reordering&&!archiving&&React.createElement('button',{onClick:()=>{setArchiving(true);setReordering(false);setSelected(new Set());},style:{padding:'10px 12px',borderRadius:10,border:'1px solid rgba(239,68,68,0.4)',background:'rgba(239,68,68,0.08)',color:'#f87171',fontSize:13,cursor:'pointer',WebkitTapHighlightColor:'transparent',minHeight:44,flexShrink:0}},'Archive'),
         archiving&&React.createElement(React.Fragment,null,
           React.createElement('button',{
-            onClick:()=>{selected.forEach(key=>onArchive(key));setArchiving(false);setSelected(new Set());},
+            onClick:()=>{onArchive(Array.from(selected));setArchiving(false);setSelected(new Set());},
             disabled:selected.size===0,
             style:{padding:'10px 14px',borderRadius:10,border:'none',background:selected.size>0?'rgba(239,68,68,0.8)':'rgba(239,68,68,0.2)',color:'#fff',fontSize:13,fontWeight:700,cursor:selected.size>0?'pointer':'default',WebkitTapHighlightColor:'transparent',minHeight:44,flexShrink:0}
           },selected.size>0?'Archive ('+selected.size+')':'Archive'),
@@ -1354,7 +1354,7 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
       React.createElement('div',{onClick:e=>e.stopPropagation(),style:{background:T.bg2,borderRadius:'20px 20px 0 0',padding:'8px 16px 40px'}},
         React.createElement('div',{style:{width:40,height:4,borderRadius:2,background:T.border2,margin:'8px auto 20px'}}),
         React.createElement('div',{style:{fontSize:14,fontWeight:700,color:T.text,marginBottom:16,textAlign:'center'}},actionSheetRoutine.label),
-        React.createElement('button',{onClick:()=>{setStrongFormat(actionSheet);setActionSheet(null);},style:{width:'100%',padding:'14px 16px',marginBottom:8,borderRadius:12,border:'none',background:'rgba(20,184,166,0.1)',color:'#5eead4',fontSize:15,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent',textAlign:'left'}},'Strong Format'),
+        React.createElement('button',{onClick:()=>{setStrongFormat(actionSheet);setActionSheet(null);},style:{width:'100%',padding:'14px 16px',marginBottom:8,borderRadius:12,border:'none',background:'rgba(20,184,166,0.1)',color:'#5eead4',fontSize:15,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent',textAlign:'left'}},'Export to Strong'),
         React.createElement('button',{onClick:()=>{setEditingRoutine(actionSheet);setActionSheet(null);},style:{width:'100%',padding:'14px 16px',marginBottom:8,borderRadius:12,border:'none',background:'rgba(124,58,237,0.15)',color:'#a78bfa',fontSize:15,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent',textAlign:'left'}},'Edit Routine'),
         React.createElement('button',{onClick:()=>{if(window.confirm('Archive '+actionSheetRoutine.label+'?')){onArchive(actionSheet);}setActionSheet(null);},style:{width:'100%',padding:'14px 16px',borderRadius:12,border:'none',background:'rgba(239,68,68,0.1)',color:'#f87171',fontSize:15,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent',textAlign:'left'}},'Archive Routine')
       )
@@ -1789,44 +1789,59 @@ function OverloadCard({allLogs,workouts}){
   );
 }
 
-// ── PROTEIN TRACKER ────────────────────────────────────────────────────────────
-function ProteinCard({profile,onSaveProfile}){
+// ── MACRO TRACKER ──────────────────────────────────────────────────────────────
+function MacroCard({profile,onSaveProfile}){
   const[collapsed,setCollapsed]=useState(false);
   const[dayOffset,setDayOffset]=useState(0);
   const[entries,setEntries]=useState([]);
   const[loading,setLoading]=useState(true);
   const[showAdd,setShowAdd]=useState(false);
   const[mealText,setMealText]=useState('');
-  const[manualGrams,setManualGrams]=useState('');
+  const[mCal,setMCal]=useState('');
+  const[mPro,setMPro]=useState('');
+  const[mCarb,setMCarb]=useState('');
+  const[mFat,setMFat]=useState('');
   const[estimating,setEstimating]=useState(false);
   const[estError,setEstError]=useState('');
   const[showSetup,setShowSetup]=useState(false);
-  const[weightInput,setWeightInput]=useState('');
-  const[unitInput,setUnitInput]=useState('lb');
+  const[wIn,setWIn]=useState('');
+  const[unitIn,setUnitIn]=useState('lb');
+  const[calIn,setCalIn]=useState('');
 
   const refDate=new Date();refDate.setDate(refDate.getDate()+dayOffset);
   const dateStr=localDateStr(refDate);
   const isToday=dayOffset===0;
 
-  // Load entries for the selected date
   useEffect(function(){
     setLoading(true);
     fetchProteinLog(dateStr).then(function(e){setEntries(e||[]);setLoading(false);}).catch(function(){setEntries([]);setLoading(false);});
   },[dateStr]);
 
-  const bodyweight=profile&&profile.bodyweight?profile.bodyweight:null;
+  const bw=profile&&profile.bodyweight?profile.bodyweight:null;
   const unit=profile&&profile.weightUnit?profile.weightUnit:'lb';
-  // Target: 1g per lb, or 2.2g per kg
-  const target=bodyweight?(unit==='kg'?Math.round(bodyweight*2.2):Math.round(bodyweight)):null;
-  const total=entries.reduce(function(t,e){return t+(e.grams||0);},0);
-  const pct=target?Math.min(100,Math.round((total/target)*100)):0;
-  const color=!target?T.muted:(total>=target?'#34d399':total>=target*0.75?'#fbbf24':'#f87171');
+  const bwLb=bw?(unit==='kg'?bw*2.205:bw):null;
+  const calTarget=profile&&profile.calorieTarget?profile.calorieTarget:null;
+
+  // Derive macro targets: protein 1g/lb, fat 0.35g/lb, carbs fill remainder
+  const pTarget=bwLb?Math.round(bwLb):null;
+  const fTarget=bwLb?Math.round(bwLb*0.35):null;
+  const cTarget=(calTarget&&pTarget&&fTarget)?Math.max(0,Math.round((calTarget-(pTarget*4)-(fTarget*9))/4)):null;
+
+  const tot=entries.reduce(function(a,e){
+    return{cal:a.cal+(e.calories||0),pro:a.pro+(e.protein||e.grams||0),carb:a.carb+(e.carbs||0),fat:a.fat+(e.fat||0)};
+  },{cal:0,pro:0,carb:0,fat:0});
 
   const dateLabel=isToday?'Today':(dayOffset===-1?'Yesterday':refDate.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}));
 
-  function persist(next){
-    setEntries(next);
-    saveProteinLog(dateStr,next);
+  function persist(next){setEntries(next);saveProteinLog(dateStr,next);}
+
+  function barColor(v,t){
+    if(!t)return T.muted;
+    var r=v/t;
+    if(r>=0.95&&r<=1.10)return'#34d399';
+    if(r>1.10)return'#f87171';
+    if(r>=0.75)return'#fbbf24';
+    return'#f87171';
   }
 
   async function estimateMeal(){
@@ -1835,75 +1850,76 @@ function ProteinCard({profile,onSaveProfile}){
     try{
       const session=await supabase.auth.getSession();
       const token=(session.data&&session.data.session)?session.data.session.access_token:'';
-      const resp=await fetch('/api/estimate-protein',{
+      const resp=await fetch('/api/estimate-macros',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
         body:JSON.stringify({meal:mealText})
       });
       const data=await resp.json();
       if(data.error){setEstError(data.error);setEstimating(false);return;}
-      const next=entries.concat([{label:mealText,grams:data.grams,note:data.breakdown||'',ts:Date.now()}]);
-      persist(next);
+      persist(entries.concat([{label:mealText,calories:data.calories||0,protein:data.protein||0,carbs:data.carbs||0,fat:data.fat||0,note:data.breakdown||'',ts:Date.now()}]));
       setMealText('');setShowAdd(false);setEstimating(false);
-    }catch(err){
-      setEstError('Estimate failed: '+err.message);setEstimating(false);
-    }
+    }catch(err){setEstError('Estimate failed: '+err.message);setEstimating(false);}
   }
 
   function addManual(){
-    const g=parseInt(manualGrams);
-    if(!g||g<=0)return;
-    const next=entries.concat([{label:mealText.trim()||'Manual entry',grams:g,note:'',ts:Date.now()}]);
-    persist(next);
-    setManualGrams('');setMealText('');setShowAdd(false);
+    var cal=parseInt(mCal)||0,pro=parseInt(mPro)||0,carb=parseInt(mCarb)||0,fat=parseInt(mFat)||0;
+    if(!cal&&!pro&&!carb&&!fat)return;
+    if(!cal)cal=pro*4+carb*4+fat*9;
+    persist(entries.concat([{label:mealText.trim()||'Manual entry',calories:cal,protein:pro,carbs:carb,fat:fat,note:'',ts:Date.now()}]));
+    setMCal('');setMPro('');setMCarb('');setMFat('');setMealText('');setShowAdd(false);
   }
 
-  function removeEntry(ts){
-    persist(entries.filter(function(e){return e.ts!==ts;}));
-  }
+  function removeEntry(ts){persist(entries.filter(function(e){return e.ts!==ts;}));}
 
-  // Setup screen if no bodyweight set
-  if(showSetup||!bodyweight){
+  if(showSetup||!bw||!calTarget){
+    var prevCal=wIn?(unitIn==='kg'?Math.round(parseFloat(wIn)*2.205):Math.round(parseFloat(wIn))):null;
     return React.createElement('div',{style:{margin:'0 16px 12px',background:T.bg2,borderRadius:14,border:'1px solid '+T.border,padding:'16px'}},
-      React.createElement('div',{style:{fontSize:14,fontWeight:700,color:T.text,marginBottom:4}},'Protein Tracker Setup'),
-      React.createElement('div',{style:{fontSize:12,color:T.dim,marginBottom:14,lineHeight:1.5}},'Enter your bodyweight to calculate your daily protein target (1g per lb).'),
+      React.createElement('div',{style:{fontSize:14,fontWeight:700,color:T.text,marginBottom:4}},'Macro Tracker Setup'),
+      React.createElement('div',{style:{fontSize:12,color:T.dim,marginBottom:14,lineHeight:1.5}},'Enter your bodyweight and daily calorie target. Protein, fat and carb targets are derived automatically.'),
+      React.createElement('div',{style:{fontSize:11,color:T.dim,marginBottom:6,fontWeight:600}},'Bodyweight'),
       React.createElement('div',{style:{display:'flex',gap:8,marginBottom:12}},
-        React.createElement('input',{
-          type:'number',inputMode:'decimal',placeholder:'Weight',
-          value:weightInput,onChange:function(e){setWeightInput(e.target.value);},
-          style:{flex:1,padding:'11px 14px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:9,color:T.text,fontSize:15,fontFamily:T.mono}
-        }),
+        React.createElement('input',{type:'number',inputMode:'decimal',placeholder:'Weight',value:wIn,onChange:function(e){setWIn(e.target.value);},style:{flex:1,padding:'11px 14px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:9,color:T.text,fontSize:15,fontFamily:T.mono}}),
         React.createElement('div',{style:{display:'flex',gap:4}},
           ['lb','kg'].map(function(u){
-            const active=unitInput===u;
-            return React.createElement('button',{key:u,onClick:function(){setUnitInput(u);},style:{padding:'11px 16px',borderRadius:9,border:'1px solid '+(active?'rgba(124,58,237,0.5)':T.border2),background:active?'rgba(124,58,237,0.2)':'transparent',color:active?'#a78bfa':T.sub,fontSize:14,fontWeight:active?700:400,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},u);
+            var a=unitIn===u;
+            return React.createElement('button',{key:u,onClick:function(){setUnitIn(u);},style:{padding:'11px 16px',borderRadius:9,border:'1px solid '+(a?'rgba(124,58,237,0.5)':T.border2),background:a?'rgba(124,58,237,0.2)':'transparent',color:a?'#a78bfa':T.sub,fontSize:14,fontWeight:a?700:400,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},u);
           })
         )
       ),
-      weightInput&&React.createElement('div',{style:{fontSize:12,color:T.muted,marginBottom:12}},'Daily target: '+(unitInput==='kg'?Math.round(parseFloat(weightInput)*2.2):Math.round(parseFloat(weightInput)))+'g protein'),
+      React.createElement('div',{style:{fontSize:11,color:T.dim,marginBottom:6,fontWeight:600}},'Daily calorie target'),
+      React.createElement('input',{type:'number',inputMode:'numeric',placeholder:'e.g. 2600',value:calIn,onChange:function(e){setCalIn(e.target.value);},style:{width:'100%',padding:'11px 14px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:9,color:T.text,fontSize:15,fontFamily:T.mono,marginBottom:12}}),
+      (wIn&&calIn)&&React.createElement('div',{style:{fontSize:12,color:T.muted,marginBottom:12,lineHeight:1.6,padding:'10px 12px',background:T.bg3,borderRadius:8}},
+        'Targets: '+calIn+' cal \u00b7 '+prevCal+'g protein \u00b7 '+Math.round(prevCal*0.35)+'g fat \u00b7 '+Math.max(0,Math.round((parseInt(calIn)-(prevCal*4)-(Math.round(prevCal*0.35)*9))/4))+'g carbs'
+      ),
       React.createElement('div',{style:{display:'flex',gap:8}},
-        bodyweight&&React.createElement('button',{onClick:function(){setShowSetup(false);},style:{flex:1,padding:12,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:14,cursor:'pointer'}},'Cancel'),
+        (bw&&calTarget)&&React.createElement('button',{onClick:function(){setShowSetup(false);},style:{flex:1,padding:12,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:14,cursor:'pointer'}},'Cancel'),
         React.createElement('button',{
           onClick:function(){
-            const w=parseFloat(weightInput);
-            if(!w||w<=0)return;
-            const next=Object.assign({},profile||{},{bodyweight:w,weightUnit:unitInput});
-            onSaveProfile(next);
+            var w=parseFloat(wIn),cal=parseInt(calIn);
+            if(!w||w<=0||!cal||cal<=0)return;
+            onSaveProfile(Object.assign({},profile||{},{bodyweight:w,weightUnit:unitIn,calorieTarget:cal}));
             setShowSetup(false);
           },
-          disabled:!weightInput,
-          style:{flex:2,padding:12,borderRadius:9,border:'none',background:weightInput?GRAD.button:'rgba(124,58,237,0.2)',color:'#fff',fontWeight:700,fontSize:14,cursor:weightInput?'pointer':'default'}
+          disabled:!wIn||!calIn,
+          style:{flex:2,padding:12,borderRadius:9,border:'none',background:(wIn&&calIn)?GRAD.button:'rgba(124,58,237,0.2)',color:'#fff',fontWeight:700,fontSize:14,cursor:(wIn&&calIn)?'pointer':'default'}
         },'Save')
       )
     );
   }
 
+  var macroRows=[
+    {k:'Protein',v:tot.pro,t:pTarget,c:'#a78bfa'},
+    {k:'Carbs',v:tot.carb,t:cTarget,c:'#38bdf8'},
+    {k:'Fat',v:tot.fat,t:fTarget,c:'#fbbf24'}
+  ];
+
   return React.createElement('div',{style:{margin:'0 16px 12px',background:T.bg2,borderRadius:14,border:'1px solid '+T.border,overflow:'hidden'}},
     React.createElement('div',{onClick:function(){setCollapsed(function(v){return !v;});},style:{padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},
       React.createElement('div',{style:{fontSize:16}},'\uD83E\uDD69'),
       React.createElement('div',{style:{flex:1}},
-        React.createElement('div',{style:{fontSize:13,fontWeight:700,color:T.text}},'Protein'+(isToday?'':' \u2014 '+dateLabel)),
-        React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1}},total+' / '+target+'g')
+        React.createElement('div',{style:{fontSize:13,fontWeight:700,color:T.text}},'Macros'+(isToday?'':' \u2014 '+dateLabel)),
+        React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1}},tot.cal+' / '+calTarget+' cal')
       ),
       React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6}},
         React.createElement('button',{onClick:function(e){e.stopPropagation();setDayOffset(function(o){return o-1;});if(collapsed)setCollapsed(false);},style:{width:28,height:28,borderRadius:7,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:16,cursor:'pointer',WebkitTapHighlightColor:'transparent',lineHeight:1}},'\u2039'),
@@ -1912,43 +1928,56 @@ function ProteinCard({profile,onSaveProfile}){
       )
     ),
     !collapsed&&React.createElement('div',{style:{padding:'0 16px 14px'}},
-      React.createElement('div',{style:{height:6,borderRadius:3,background:'rgba(148,163,184,0.12)',overflow:'hidden',marginBottom:12}},
-        React.createElement('div',{style:{height:'100%',width:pct+'%',background:color,borderRadius:3,transition:'width 0.4s ease'}})
+      React.createElement('div',{style:{marginBottom:12}},
+        React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:4}},
+          React.createElement('div',{style:{fontSize:12,color:T.sub,fontWeight:600}},'Calories'),
+          React.createElement('div',{style:{fontSize:13,fontFamily:T.mono,fontWeight:700,color:barColor(tot.cal,calTarget)}},tot.cal+' / '+calTarget)
+        ),
+        React.createElement('div',{style:{height:8,borderRadius:4,background:'rgba(148,163,184,0.12)',overflow:'hidden'}},
+          React.createElement('div',{style:{height:'100%',width:Math.min(100,calTarget?Math.round(tot.cal/calTarget*100):0)+'%',background:barColor(tot.cal,calTarget),borderRadius:4,transition:'width 0.4s ease'}})
+        )
       ),
+      macroRows.map(function(m){
+        var p=m.t?Math.min(100,Math.round(m.v/m.t*100)):0;
+        return React.createElement('div',{key:m.k,style:{marginBottom:8}},
+          React.createElement('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:3}},
+            React.createElement('div',{style:{fontSize:11,color:T.dim}},m.k),
+            React.createElement('div',{style:{fontSize:11,fontFamily:T.mono,color:T.sub}},m.v+' / '+(m.t||'\u2014')+'g')
+          ),
+          React.createElement('div',{style:{height:4,borderRadius:2,background:'rgba(148,163,184,0.12)',overflow:'hidden'}},
+            React.createElement('div',{style:{height:'100%',width:p+'%',background:m.c,borderRadius:2,transition:'width 0.4s ease'}})
+          )
+        );
+      }),
       loading&&React.createElement('div',{style:{fontSize:12,color:T.dim,textAlign:'center',padding:'8px 0'}},'Loading...'),
       !loading&&entries.length===0&&React.createElement('div',{style:{fontSize:12,color:T.dim,textAlign:'center',padding:'10px 0'}},'No meals logged'),
       !loading&&entries.map(function(e){
         return React.createElement('div',{key:e.ts,style:{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:'1px solid '+T.border}},
           React.createElement('div',{style:{flex:1,minWidth:0}},
             React.createElement('div',{style:{fontSize:13,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},e.label),
-            e.note&&React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},e.note)
+            React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1,fontFamily:T.mono}},
+              (e.calories||0)+'cal \u00b7 '+(e.protein||e.grams||0)+'p \u00b7 '+(e.carbs||0)+'c \u00b7 '+(e.fat||0)+'f'
+            )
           ),
-          React.createElement('div',{style:{fontSize:13,fontWeight:700,color:T.sub,fontFamily:T.mono,flexShrink:0}},e.grams+'g'),
           React.createElement('button',{onClick:function(){removeEntry(e.ts);},style:{width:22,height:22,borderRadius:5,border:'none',background:'rgba(239,68,68,0.12)',color:'#f87171',fontSize:13,cursor:'pointer',flexShrink:0,lineHeight:1,WebkitTapHighlightColor:'transparent'}},'\u00d7')
         );
       }),
       !showAdd&&React.createElement('div',{style:{display:'flex',gap:8,marginTop:10}},
         React.createElement('button',{onClick:function(){setShowAdd(true);},style:{flex:1,padding:10,borderRadius:9,border:'none',background:GRAD.button,color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'+ Log Meal'),
-        React.createElement('button',{onClick:function(){setWeightInput(String(bodyweight));setUnitInput(unit);setShowSetup(true);},style:{padding:'10px 12px',borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.dim,fontSize:12,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'\u2699')
+        React.createElement('button',{onClick:function(){setWIn(String(bw));setUnitIn(unit);setCalIn(String(calTarget));setShowSetup(true);},style:{padding:'10px 12px',borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.dim,fontSize:12,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'\u2699')
       ),
       showAdd&&React.createElement('div',{style:{marginTop:10}},
-        React.createElement('textarea',{
-          value:mealText,
-          onChange:function(e){setMealText(e.target.value);},
-          placeholder:'e.g. 8oz grilled chicken, 1 cup rice, broccoli',
-          style:{width:'100%',minHeight:64,padding:'10px 12px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:9,color:T.text,fontSize:13,fontFamily:T.sans,lineHeight:1.5,resize:'vertical',marginBottom:8}
-        }),
+        React.createElement('textarea',{value:mealText,onChange:function(e){setMealText(e.target.value);},placeholder:'e.g. 8oz grilled chicken, 1 cup rice, olive oil',style:{width:'100%',minHeight:60,padding:'10px 12px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:9,color:T.text,fontSize:13,fontFamily:T.sans,lineHeight:1.5,resize:'vertical',marginBottom:8}}),
         estError&&React.createElement('div',{style:{padding:'8px 10px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:7,fontSize:12,color:'#f87171',marginBottom:8}},estError),
-        React.createElement('div',{style:{display:'flex',gap:8,marginBottom:8}},
-          React.createElement('input',{
-            type:'number',inputMode:'numeric',placeholder:'grams',
-            value:manualGrams,onChange:function(e){setManualGrams(e.target.value);},
-            style:{width:90,padding:'10px 12px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:9,color:T.text,fontSize:13,fontFamily:T.mono}
-          }),
-          React.createElement('button',{onClick:addManual,disabled:!manualGrams,style:{padding:'10px 14px',borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:manualGrams?T.sub:T.dim,fontSize:13,cursor:manualGrams?'pointer':'default'}},'Add manually'),
-          React.createElement('button',{onClick:estimateMeal,disabled:!mealText.trim()||estimating,style:{flex:1,padding:'10px 12px',borderRadius:9,border:'none',background:(mealText.trim()&&!estimating)?GRAD.button:'rgba(124,58,237,0.2)',color:'#fff',fontWeight:700,fontSize:13,cursor:(mealText.trim()&&!estimating)?'pointer':'default'}},estimating?'Estimating...':'\u2728 Estimate')
+        React.createElement('button',{onClick:estimateMeal,disabled:!mealText.trim()||estimating,style:{width:'100%',padding:11,borderRadius:9,border:'none',background:(mealText.trim()&&!estimating)?GRAD.button:'rgba(124,58,237,0.2)',color:'#fff',fontWeight:700,fontSize:13,cursor:(mealText.trim()&&!estimating)?'pointer':'default',marginBottom:10}},estimating?'Estimating...':'\u2728 Estimate Macros'),
+        React.createElement('div',{style:{fontSize:10,color:T.dim,marginBottom:6,textAlign:'center'}},'or enter manually'),
+        React.createElement('div',{style:{display:'flex',gap:6,marginBottom:8}},
+          [{p:'cal',v:mCal,s:setMCal},{p:'protein',v:mPro,s:setMPro},{p:'carbs',v:mCarb,s:setMCarb},{p:'fat',v:mFat,s:setMFat}].map(function(f){
+            return React.createElement('input',{key:f.p,type:'number',inputMode:'numeric',placeholder:f.p,value:f.v,onChange:function(e){f.s(e.target.value);},style:{flex:1,minWidth:0,padding:'9px 6px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:8,color:T.text,fontSize:12,fontFamily:T.mono,textAlign:'center'}});
+          })
         ),
-        React.createElement('button',{onClick:function(){setShowAdd(false);setMealText('');setManualGrams('');setEstError('');},style:{width:'100%',padding:9,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.dim,fontSize:12,cursor:'pointer'}},'Cancel')
+        React.createElement('button',{onClick:addManual,disabled:!(mCal||mPro||mCarb||mFat),style:{width:'100%',padding:10,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:(mCal||mPro||mCarb||mFat)?T.sub:T.dim,fontSize:13,cursor:(mCal||mPro||mCarb||mFat)?'pointer':'default',marginBottom:8}},'Add manually'),
+        React.createElement('button',{onClick:function(){setShowAdd(false);setMealText('');setMCal('');setMPro('');setMCarb('');setMFat('');setEstError('');},style:{width:'100%',padding:9,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.dim,fontSize:12,cursor:'pointer'}},'Cancel')
       )
     )
   );
@@ -2238,14 +2267,18 @@ function PPLTracker(){
   function setSchedule(w){setScheduleRaw(w);saveLS('fitlog_schedule',w);saveServerSchedule(w);}
   function setRestDefaults(d){setRestDefaultsRaw(d);saveLS('fitlog_rest_defaults',d);saveServerRestDefaults(d);}
   function handleReorder(newOrder){saveLS('fitlog_routine_order',newOrder);}
-  function handleArchive(key){
-    const updated={...workouts,[key]:{...workouts[key],archived:true}};
+  // Accepts a single key or an array of keys. Batches into ONE setWorkouts call so
+  // multi-select doesn't lose changes to stale-closure overwrites.
+  function setArchivedFlag(keys,flag){
+    const list=Array.isArray(keys)?keys:[keys];
+    const updated={...workouts};
+    list.forEach(function(k){
+      if(updated[k])updated[k]={...updated[k],archived:flag};
+    });
     setWorkouts(updated);
   }
-  function handleUnarchive(key){
-    const updated={...workouts,[key]:{...workouts[key],archived:false}};
-    setWorkouts(updated);
-  }
+  function handleArchive(keys){setArchivedFlag(keys,true);}
+  function handleUnarchive(keys){setArchivedFlag(keys,false);}
 
   function handleUpdateLog(exId,logIdx,updates){
     const logs={...allLogs};const arr=[...(logs[exId]||[])];
@@ -2416,7 +2449,7 @@ function PPLTracker(){
       React.createElement('div',{style:{padding:'16px 16px 12px'}},
         React.createElement('div',{style:{fontSize:20,fontWeight:700,color:T.text}},'Daily')
       ),
-      React.createElement(ProteinCard,{profile,onSaveProfile:setProfile})
+      React.createElement(MacroCard,{profile,onSaveProfile:setProfile})
     ),
 
     tab==='schedule'&&React.createElement(ScheduleTab,{

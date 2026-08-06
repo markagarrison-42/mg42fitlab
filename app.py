@@ -1,5 +1,4 @@
-from flask import Flask, render_template, redirect, url_for, request, session, jsonify, send_file
-from functools import wraps
+from flask import Flask, render_template, request, jsonify, send_file
 import os, json, io, sqlite3, time
 from datetime import datetime, timedelta
 
@@ -9,8 +8,6 @@ from apscheduler.schedulers.background import BackgroundScheduler
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "fitlog-secret-2024")
 
-USERNAME = os.environ.get("FITLOG_USER", "madfella")
-PASSWORD = os.environ.get("FITLOG_PASS", "Fitlog2024")
 DB_PATH  = os.path.join(os.path.dirname(__file__), "fitlog.db")
 
 # ── SCHEDULER ─────────────────────────────────────────────────────────────────
@@ -55,36 +52,7 @@ def init_db():
 
 init_db()
 
-# ── AUTH ──────────────────────────────────────────────────────────────────────
-def login_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if not session.get("logged_in"):
-            if request.path.startswith("/api/"):
-                return jsonify({"error": "Unauthorized"}), 401
-            return redirect(url_for("login"))
-        return f(*args, **kwargs)
-    return decorated
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    error = None
-    if request.method == "POST":
-        if (request.form.get("username", "").strip().lower() == USERNAME.lower() and
-                request.form.get("password", "") == PASSWORD):
-            session["logged_in"] = True
-            session["user"] = USERNAME
-            return redirect(url_for("index"))
-        error = "Invalid username or password."
-    return render_template("login.html", error=error)
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
-
 @app.route("/")
-@login_required
 def index():
     return render_template("index.html")
 
@@ -94,7 +62,6 @@ def health():
 
 # ── LOGS ──────────────────────────────────────────────────────────────────────
 @app.route("/api/logs", methods=["GET"])
-@login_required
 def get_logs():
     with get_db() as conn:
         rows = conn.execute("SELECT exercise_id, data FROM logs").fetchall()
@@ -105,7 +72,6 @@ def get_logs():
     return jsonify(result)
 
 @app.route("/api/logs", methods=["POST"])
-@login_required
 def save_logs():
     data = request.get_json()
     if not isinstance(data, dict):
@@ -121,7 +87,6 @@ def save_logs():
     return jsonify({"message": "Saved", "count": len(data)})
 
 @app.route("/api/logs/<exercise_id>", methods=["POST"])
-@login_required
 def save_exercise_logs(exercise_id):
     entries = request.get_json()
     now = datetime.utcnow().isoformat()
@@ -134,7 +99,6 @@ def save_exercise_logs(exercise_id):
     return jsonify({"message": "Saved"})
 
 @app.route("/api/export")
-@login_required
 def export_logs():
     with get_db() as conn:
         rows = conn.execute("SELECT exercise_id, data FROM logs").fetchall()
@@ -148,7 +112,6 @@ def export_logs():
     return send_file(buf, mimetype="application/json", as_attachment=True, download_name=filename)
 
 @app.route("/api/import", methods=["POST"])
-@login_required
 def import_logs():
     try:
         if "file" in request.files:
@@ -174,7 +137,6 @@ def import_logs():
 
 # ── WORKOUTS (server-side persistence) ───────────────────────────────────────
 @app.route("/api/workouts", methods=["GET"])
-@login_required
 def get_workouts():
     user_id = session.get("user", USERNAME)
     with get_db() as conn:
@@ -187,7 +149,6 @@ def get_workouts():
     return jsonify(None)
 
 @app.route("/api/workouts", methods=["POST"])
-@login_required
 def save_workouts():
     user_id = session.get("user", USERNAME)
     data = request.get_json()
@@ -227,7 +188,6 @@ def push_vapid_key():
     return jsonify({"key": os.environ.get("VAPID_PUBLIC_KEY", "")})
 
 @app.route("/api/push/subscribe", methods=["POST"])
-@login_required
 def push_subscribe():
     user_id  = session.get("user", USERNAME)
     data     = request.get_json()
@@ -249,7 +209,6 @@ def push_subscribe():
     return jsonify({"ok": True})
 
 @app.route("/api/push/timer", methods=["POST"])
-@login_required
 def push_schedule_timer():
     user_id  = session.get("user", USERNAME)
     data     = request.get_json()
@@ -276,7 +235,6 @@ def push_schedule_timer():
     return jsonify({"ok": True, "job_id": job_id})
 
 @app.route("/api/push/cancel", methods=["POST"])
-@login_required
 def push_cancel_timer():
     data   = request.get_json()
     job_id = data.get("job_id")
@@ -355,6 +313,70 @@ Output ONLY the CSV. No markdown, no explanation, no code fences."""
         csv_text = "\n".join(lines).strip()
 
         return jsonify({"csv": csv_text})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── PROTEIN ESTIMATOR ─────────────────────────────────────────────────────────
+@app.route("/api/estimate-macros", methods=["POST"])
+@app.route("/api/estimate-protein", methods=["POST"])  # legacy alias
+def estimate_macros():
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json()
+    meal = data.get("meal", "").strip()
+    if not meal:
+        return jsonify({"error": "No meal provided"}), 400
+
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not anthropic_key:
+        return jsonify({"error": "API key not configured"}), 500
+
+    try:
+        import urllib.request as urlreq
+
+        system_prompt = """You estimate macronutrient content in meals. The user describes what they ate.
+
+Respond with ONLY valid JSON in this exact shape, no markdown, no explanation:
+{"calories": <int>, "protein": <int grams>, "carbs": <int grams>, "fat": <int grams>, "breakdown": "<short one-line breakdown>"}
+
+Rules:
+- All four numeric values must be whole numbers
+- Values should be internally consistent: calories should roughly equal (protein*4 + carbs*4 + fat*9)
+- breakdown should be brief, e.g. "8oz chicken + 1c rice + olive oil"
+- If the meal is vague, make a reasonable estimate and note the assumption in breakdown
+- Output nothing except the JSON object"""
+
+        payload = json.dumps({
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 300,
+            "system": system_prompt,
+            "messages": [{"role": "user", "content": meal}]
+        }).encode("utf-8")
+
+        req = urlreq.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=payload,
+            headers={
+                "x-api-key": anthropic_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
+            }
+        )
+
+        with urlreq.urlopen(req, timeout=20) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+
+        text = result["content"][0]["text"].strip()
+        # Strip markdown fences if present
+        if text.startswith("```"):
+            lines = text.split("\n")
+            text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+        parsed = json.loads(text.strip())
+        return jsonify(parsed)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
