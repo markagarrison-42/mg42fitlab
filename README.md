@@ -39,3 +39,4 @@ A Strong-inspired workout tracker built as a single-file React app (no build ste
 - Deploy target for the tracker JS is `static/ppl-tracker.js` — the working/output filename is `ppl-tracker-complete.js`, must be renamed on upload
 - Strong CSV exports use rest-timer phantom rows (`W:0 R:0 Secs>0`) which are filtered out during import
 - `DEFAULT_WORKOUTS` protected keys are always re-merged on load to prevent stale localStorage/server data from hiding core routines after code updates
+
