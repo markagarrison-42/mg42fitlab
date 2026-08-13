@@ -487,17 +487,26 @@ function parseStrongCSV(text){
   const col=h=>header.indexOf(h);
 
   // Support both old format (Date, Workout Name) and new format (Workout #, Workout Start Date, Workout Name)
-  const isNewFormat=col('Workout Start Date')>=0||col('Workout #')>=0;
-  const iDate=isNewFormat?col('Workout Start Date'):col('Date');
-  const iWorkout=col('Workout Name');
-  const iExercise=col('Exercise Name');
-  const iSetOrder=col('Set Order');
-  const iWeight=isNewFormat?col('Weight (lb)'):col('Weight');
-  const iReps=col('Reps');
-  const iNotes=isNewFormat?col('Workout Note'):col('Notes');
-  const iSeconds=isNewFormat?col('Set Duration (sec)'):col('Seconds');
-  const iRestTimer=col('Rest Timer (sec)');
-  const iTz=col('Workout Timezone');
+  // Resolve columns by trying multiple known header names (Strong has renamed
+  // these across at least three export format versions).
+  const pick=function(){
+    for(var i=0;i<arguments.length;i++){
+      var ix=col(arguments[i]);
+      if(ix>=0)return ix;
+    }
+    return -1;
+  };
+  const iDate=pick('Workout Start Date','Date');
+  const iWorkout=pick('Workout Name','Workout');
+  const iExercise=pick('Exercise Name','Exercise');
+  const iSetOrder=pick('Set Order','Set');
+  const iWeight=pick('Weight (lb)','Weight (kg)','Weight');
+  const iReps=pick('Reps');
+  const iNotes=pick('Workout Note','Notes');
+  const iSeconds=pick('Set Duration (s)','Set Duration (sec)','Seconds');
+  const iRestTimer=pick('Rest Timer (s)','Rest Timer (sec)');
+  const iTz=pick('Workout Timezone');
+  const isNewFormat=col('Date')<0;
 
   if(iDate<0||iWorkout<0||iExercise<0)return null;
   const logs={};const routineMap={};
@@ -1789,6 +1798,56 @@ function OverloadCard({allLogs,workouts}){
   );
 }
 
+// Build a frequency-ranked list of previously logged foods from recent daily logs.
+// Anything logged 2+ times surfaces as a quick-add suggestion; one-offs stay hidden.
+async function fetchFrequentFoods(daysBack){
+  try{
+    var since=new Date();since.setDate(since.getDate()-(daysBack||60));
+    var sinceStr=localDateStr(since);
+    var res=await supabase.from('fitlog_protein_logs').select('entries,log_date').gte('log_date',sinceStr);
+    if(res.error||!res.data)return [];
+    var byKey={};
+    res.data.forEach(function(row){
+      (row.entries||[]).forEach(function(e){
+        var label=(e.label||'').trim();
+        if(!label)return;
+        var key=label.toLowerCase();
+        if(!byKey[key]){
+          byKey[key]={label:label,count:0,calories:0,protein:0,carbs:0,fat:0,last:row.log_date,
+            hasMacros:false,_bestStamp:null};
+        }
+        var f=byKey[key];
+        f.count++;
+        if(row.log_date>f.last)f.last=row.log_date;
+        // Use the MOST RECENT entry that has real macro data. Correcting a food once
+        // fixes the suggestion immediately, rather than needing several entries to
+        // pull an average back. Legacy protein-only entries carry no macros, so they
+        // are skipped for values but still count toward frequency.
+        var hasMacro=(e.calories!==undefined&&e.calories!==null);
+        if(hasMacro){
+          var stamp=(row.log_date||'')+'#'+(e.ts||0);
+          if(!f._bestStamp||stamp>f._bestStamp){
+            f._bestStamp=stamp;
+            f.calories=e.calories||0;
+            f.protein=(e.protein!==undefined&&e.protein!==null)?e.protein:(e.grams||0);
+            f.carbs=e.carbs||0;
+            f.fat=e.fat||0;
+            f.hasMacros=true;
+          }
+        }
+      });
+    });
+    var list=Object.keys(byKey).map(function(k){return byKey[k];});
+    // Only suggest foods with real macro data behind them
+    list=list.filter(function(f){return f.count>=2&&f.hasMacros;});
+    list.sort(function(a,b){
+      if(b.count!==a.count)return b.count-a.count;
+      return a.last<b.last?1:-1;
+    });
+    return list;
+  }catch(err){return [];}
+}
+
 // ── MACRO TRACKER ──────────────────────────────────────────────────────────────
 function MacroCard({profile,onSaveProfile}){
   const[collapsed,setCollapsed]=useState(false);
@@ -1813,6 +1872,8 @@ function MacroCard({profile,onSaveProfile}){
   const[wIn,setWIn]=useState('');
   const[unitIn,setUnitIn]=useState('lb');
   const[calIn,setCalIn]=useState('');
+  const[freqFoods,setFreqFoods]=useState([]);
+  const[foodSearch,setFoodSearch]=useState('');
 
   const refDate=new Date();refDate.setDate(refDate.getDate()+dayOffset);
   const dateStr=localDateStr(refDate);
@@ -1822,6 +1883,10 @@ function MacroCard({profile,onSaveProfile}){
     setLoading(true);
     fetchProteinLog(dateStr).then(function(e){setEntries(e||[]);setLoading(false);}).catch(function(){setEntries([]);setLoading(false);});
   },[dateStr]);
+
+  useEffect(function(){
+    fetchFrequentFoods(60).then(function(list){setFreqFoods(list||[]);}).catch(function(){});
+  },[dateStr,entries.length]);
 
   const bw=profile&&profile.bodyweight?profile.bodyweight:null;
   const unit=profile&&profile.weightUnit?profile.weightUnit:'lb';
@@ -1874,6 +1939,11 @@ function MacroCard({profile,onSaveProfile}){
     if(!cal)cal=pro*4+carb*4+fat*9;
     persist(entries.concat([{label:mealText.trim()||'Manual entry',calories:cal,protein:pro,carbs:carb,fat:fat,note:'',ts:Date.now()}]));
     setMCal('');setMPro('');setMCarb('');setMFat('');setMealText('');setShowAdd(false);
+  }
+
+  function quickAdd(f){
+    persist(entries.concat([{label:f.label,calories:f.calories,protein:f.protein,carbs:f.carbs,fat:f.fat,note:'',ts:Date.now()}]));
+    setShowAdd(false);setFoodSearch('');setMealText('');
   }
 
   function removeEntry(ts){persist(entries.filter(function(e){return e.ts!==ts;}));}
@@ -2007,6 +2077,39 @@ function MacroCard({profile,onSaveProfile}){
         React.createElement('button',{onClick:function(){setWIn(String(bw));setUnitIn(unit);setCalIn(String(calTarget));setShowSetup(true);},style:{padding:'10px 12px',borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.dim,fontSize:12,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'\u2699')
       ),
       showAdd&&React.createElement('div',{style:{marginTop:10}},
+        freqFoods.length>0&&React.createElement('div',{style:{marginBottom:12}},
+          React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:7}},
+            React.createElement('div',{style:{fontSize:11,fontWeight:700,color:T.dim,textTransform:'uppercase',letterSpacing:'0.08em'}},'Frequent'),
+            React.createElement('input',{
+              type:'text',value:foodSearch,
+              onChange:function(e){setFoodSearch(e.target.value);},
+              placeholder:'search saved foods',
+              style:{flex:1,padding:'6px 10px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:7,color:T.text,fontSize:12,fontFamily:T.sans}
+            })
+          ),
+          (function(){
+            var q=foodSearch.trim().toLowerCase();
+            var list=freqFoods.filter(function(f){return !q||f.label.toLowerCase().indexOf(q)>=0;});
+            if(!list.length)return React.createElement('div',{style:{fontSize:11,color:T.dim,padding:'6px 2px'}},'No matches');
+            return React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:5,maxHeight:168,overflowY:'auto'}},
+              list.slice(0,20).map(function(f){
+                return React.createElement('button',{
+                  key:f.label,
+                  onClick:function(){quickAdd(f);},
+                  style:{display:'flex',alignItems:'center',gap:9,width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid '+T.border,background:T.bg3,cursor:'pointer',textAlign:'left',WebkitTapHighlightColor:'transparent'}
+                },
+                  React.createElement('div',{style:{flex:1,minWidth:0}},
+                    React.createElement('div',{style:{fontSize:12,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},f.label),
+                    React.createElement('div',{style:{fontSize:9,color:T.dim,marginTop:1,fontFamily:T.mono}},f.calories+'cal \u00b7 '+f.protein+'p \u00b7 '+f.carbs+'c \u00b7 '+f.fat+'f')
+                  ),
+                  React.createElement('div',{style:{fontSize:9,color:T.dim,flexShrink:0,fontFamily:T.mono}},'\u00d7'+f.count),
+                  React.createElement('div',{style:{fontSize:15,color:'#a78bfa',flexShrink:0,lineHeight:1}},'+')
+                );
+              })
+            );
+          })(),
+          React.createElement('div',{style:{height:1,background:T.border,margin:'12px 0 0'}})
+        ),
         React.createElement('textarea',{value:mealText,onChange:function(e){setMealText(e.target.value);},placeholder:'e.g. 8oz grilled chicken, 1 cup rice, olive oil',style:{width:'100%',minHeight:60,padding:'10px 12px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:9,color:T.text,fontSize:13,fontFamily:T.sans,lineHeight:1.5,resize:'vertical',marginBottom:8}}),
         estError&&React.createElement('div',{style:{padding:'8px 10px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:7,fontSize:12,color:'#f87171',marginBottom:8}},estError),
         React.createElement('button',{onClick:estimateMeal,disabled:!mealText.trim()||estimating,style:{width:'100%',padding:11,borderRadius:9,border:'none',background:(mealText.trim()&&!estimating)?GRAD.button:'rgba(124,58,237,0.2)',color:'#fff',fontWeight:700,fontSize:13,cursor:(mealText.trim()&&!estimating)?'pointer':'default',marginBottom:10}},estimating?'Estimating...':'\u2728 Estimate Macros'),
