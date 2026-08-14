@@ -1185,7 +1185,7 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
 
     // Build Strong template CSV rows
     // Columns: Template #,Folder Name,Template Name,Exercise Name,Set Order,Superset Index,Weight (kg),Reps,Set Duration (sec),Distance (m),Rest Timer (sec),Exercise Sticky Note,Exercise Notes,Template Note
-    var csvRows=['"Template #","Folder Name","Template Name","Exercise Name","Set Order","Superset Index","Weight (kg)","Reps","Set Duration (sec)","Distance (m)","Rest Timer (sec)","Exercise Sticky Note","Exercise Notes","Template Note"'];
+    var csvRows=['"Folder","Template Name","Exercise","Set","Group","Weight (kg)","Reps","Set Duration (s)","Distance (m)","Rest Timer (s)","Exercise Notes","Template Note"'];
     var templateNote=w.note||'';
     var exNotes='';
 
@@ -1208,22 +1208,19 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
           var parts=repsStr.split('-');
           repsVal=parseInt(parts[parts.length-1])||'';
         }
-        var isFirst=setIdx===0;
         var row=[
-          1,                          // Template #
-          '"'+folderName+'"',         // Folder Name
-          '"'+templateName+'"',       // Template Name
-          '"'+ex.name+'"',            // Exercise Name
-          setOrder,                   // Set Order
-          0,                          // Superset Index
-          '',                         // Weight (kg) - leave blank, user fills in
-          repsVal,                    // Reps
-          '',                         // Set Duration (sec)
-          '',                         // Distance (m)
-          restSec,                    // Rest Timer (sec)
-          '',                         // Exercise Sticky Note
-          isFirst?'"'+exNotes+'"':'',// Exercise Notes (first set only)
-          isFirst&&exIdx===0?'"'+templateNote+'"':'' // Template Note (first row only)
+          '"'+folderName+'"',      // Folder
+          '"'+templateName+'"',    // Template Name
+          '"'+ex.name+'"',         // Exercise
+          setOrder,                // Set
+          '',                      // Group (superset letter, blank = not supersetted)
+          '',                      // Weight (kg) - blank, user fills in
+          repsVal,                 // Reps
+          '',                      // Set Duration (s)
+          '',                      // Distance (m)
+          restSec,                 // Rest Timer (s)
+          '',                      // Exercise Notes
+          '"'+templateNote+'"'     // Template Note (repeats on every row)
         ];
         csvRows.push(row.join(','));
       }
@@ -1649,6 +1646,76 @@ function ExerciseDatabase({workouts,restDefaults,onSaveRestDefaults,onSaveExerci
 }
 
 
+
+// ── VOLUME GAP SUGGESTIONS ─────────────────────────────────────
+// Compares weekly volume against targets, subtracts what remaining scheduled
+// sessions will already cover, and suggests exercises already in your library.
+// Only surfaces gaps the current plan will not close on its own.
+function getVolumeSuggestions(allLogs,workouts,schedule,customBp){
+  var vd=getWeeklyVolume(allLogs,new Date(),customBp);
+  var byBodyPart=vd.byBodyPart;
+  var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var todayIdx=new Date().getDay();
+
+  function bpOf(ex){
+    return (customBp&&customBp[ex.id])?customBp[ex.id]:inferBodyPart(ex.name);
+  }
+
+  var remaining=[];
+  for(var i=todayIdx;i<7;i++){
+    var it=(schedule||[]).find(function(s){return s.day===days[i];});
+    if(it&&it.workoutKey&&workouts[it.workoutKey]){
+      remaining.push({day:days[i],key:it.workoutKey,w:workouts[it.workoutKey],isToday:i===todayIdx});
+    }
+  }
+
+  var next=remaining.find(function(r){return !r.isToday;})||remaining[0]||null;
+
+  var pool={};
+  Object.keys(workouts).forEach(function(k){
+    var w=workouts[k];
+    if(!w||w.archived||!w.exercises)return;
+    w.exercises.forEach(function(ex){
+      if(!ex||!ex.id||!ex.name)return;
+      var bp=bpOf(ex);
+      if(!pool[bp])pool[bp]={};
+      if(!pool[bp][ex.id])pool[bp][ex.id]={id:ex.id,name:ex.name,sets:parseInt(ex.sets)||3,reps:ex.reps||'10-12',uses:0};
+      pool[bp][ex.id].uses++;
+    });
+  });
+
+  var gaps=[];
+  Object.keys(TARGET_VOLUME).forEach(function(bp){
+    var target=TARGET_VOLUME[bp];
+    if(!target)return;
+    var lo=target[0];
+    var done=byBodyPart[bp]||0;
+    if(done>=lo)return;
+
+    var scheduled=0;
+    remaining.forEach(function(r){
+      (r.w.exercises||[]).forEach(function(ex){
+        if(ex&&ex.id&&bpOf(ex)===bp)scheduled+=(parseInt(ex.sets)||0);
+      });
+    });
+
+    var stillShort=(lo-done)-scheduled;
+    if(stillShort<=0)return;
+
+    var cands=pool[bp]?Object.keys(pool[bp]).map(function(id){return pool[bp][id];}):[];
+    cands.sort(function(a,b){return b.uses-a.uses;});
+
+    gaps.push({
+      bodyPart:bp,done:done,target:lo,
+      scheduled:scheduled,stillShort:stillShort,
+      candidates:cands.slice(0,3)
+    });
+  });
+
+  if(!gaps.length)return null;
+  gaps.sort(function(a,b){return b.stillShort-a.stillShort;});
+  return{gaps:gaps.slice(0,6),next:next,daysLeft:remaining.length};
+}
 
 // ── PROGRESSIVE OVERLOAD ANALYSIS ─────────────────────────────────────────────
 function getProgressiveOverload(allLogs, workouts){
@@ -2240,8 +2307,113 @@ function BodyweightCard({profile,onSaveProfile}){
   );
 }
 
+// ── VOLUME GAP CARD ──────────────────────────────────────────
+function VolumeGapCard({allLogs,workouts,schedule,customBp,profile,onSaveProfile}){
+  const[open,setOpen]=useState(false);
+
+  var wk=getWeekRange(new Date());
+  var weekKey=localDateStr(wk.start);
+  var dismissed=(profile&&profile.gapDismissals&&profile.gapDismissals.week===weekKey)
+    ? (profile.gapDismissals.groups||[]) : [];
+
+  var sug=getVolumeSuggestions(allLogs,workouts,schedule,customBp);
+  if(!sug)return null;
+
+  var visible=sug.gaps.filter(function(g){return dismissed.indexOf(g.bodyPart)<0;});
+  if(!visible.length)return null;
+
+  function dismiss(bp){
+    var next=dismissed.concat([bp]);
+    onSaveProfile(Object.assign({},profile||{},{gapDismissals:{week:weekKey,groups:next}}));
+  }
+
+  // Build a supplementary session from every visible gap and export as Strong template
+  function exportGaps(){
+    var rows=['"Folder","Template Name","Exercise","Set","Group","Weight (kg)","Reps","Set Duration (s)","Distance (m)","Rest Timer (s)","Exercise Notes","Template Note"'];
+    var rd=loadLS('fitlog_rest_defaults',{_default:120});
+    var tname='Volume Top-Up';
+    var tnote='Auto-built from weekly volume gaps.';
+    var seen={};
+    var first=true;
+    visible.forEach(function(g){
+      var pick=g.candidates[0];
+      if(!pick||seen[pick.id])return;
+      seen[pick.id]=true;
+      var sets=Math.max(1,Math.min(6,g.stillShort));
+      var rest=rd[pick.id]||rd._default||120;
+      var repsStr=pick.reps||'10-12';
+      var parts=String(repsStr).split('-');
+      var repsVal=parseInt(parts[parts.length-1])||12;
+      for(var s=1;s<=sets;s++){
+        rows.push(['"Volume Top-Up"','"'+tname+'"','"'+pick.name+'"',s,'','',repsVal,'','',rest,'',
+          '"'+tnote+'"'].join(','));
+      }
+      first=false;
+    });
+    if(rows.length<2)return;
+    var blob=new Blob([rows.join('\n')],{type:'text/csv'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;a.download='volume_top_up_strong_template.csv';a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  if(!open){
+    return React.createElement('div',{style:{margin:'0 16px 12px'}},
+      React.createElement('button',{
+        onClick:function(){setOpen(true);},
+        style:{width:'100%',padding:'13px 16px',borderRadius:12,border:'1px solid rgba(251,191,36,0.3)',background:'rgba(251,191,36,0.07)',color:'#fbbf24',fontSize:13,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent',textAlign:'left',display:'flex',alignItems:'center',gap:10}
+      },
+        React.createElement('span',{style:{fontSize:15}},'\u26A0\uFE0F'),
+        React.createElement('span',{style:{flex:1}},'Show suggestions \u00b7 '+visible.length+' muscle group'+(visible.length>1?'s':'')+' behind'),
+        React.createElement('span',{style:{fontSize:12,opacity:0.7}},'\u2304')
+      )
+    );
+  }
+
+  return React.createElement('div',{style:{margin:'0 16px 12px',background:T.bg2,borderRadius:14,border:'1px solid '+T.border,overflow:'hidden'}},
+    React.createElement('div',{onClick:function(){setOpen(false);},style:{padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},
+      React.createElement('div',{style:{fontSize:16}},'\u26A0\uFE0F'),
+      React.createElement('div',{style:{flex:1}},
+        React.createElement('div',{style:{fontSize:13,fontWeight:700,color:T.text}},'Volume gaps'),
+        React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1}},sug.daysLeft+' training day'+(sug.daysLeft===1?'':'s')+' left this week')
+      ),
+      React.createElement('div',{style:{fontSize:13,color:T.dim}},'\u2303')
+    ),
+    React.createElement('div',{style:{padding:'0 16px 14px'}},
+      visible.map(function(g){
+        return React.createElement('div',{key:g.bodyPart,style:{padding:'10px 0',borderTop:'1px solid '+T.border}},
+          React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:6}},
+            React.createElement('div',{style:{flex:1}},
+              React.createElement('div',{style:{fontSize:13,fontWeight:600,color:T.text}},g.bodyPart),
+              React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1,fontFamily:T.mono}},
+                g.done+'/'+g.target+' done'+(g.scheduled?' \u00b7 '+g.scheduled+' scheduled':'')+' \u00b7 '+g.stillShort+' short'
+              )
+            ),
+            React.createElement('button',{
+              onClick:function(){dismiss(g.bodyPart);},
+              style:{width:22,height:22,borderRadius:5,border:'1px solid '+T.border2,background:'transparent',color:T.dim,fontSize:12,cursor:'pointer',flexShrink:0,lineHeight:1,WebkitTapHighlightColor:'transparent'}
+            },'\u00d7')
+          ),
+          g.candidates.length>0
+            ? React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:5}},
+                g.candidates.map(function(cd){
+                  return React.createElement('div',{key:cd.id,style:{fontSize:11,padding:'4px 9px',borderRadius:6,background:T.bg3,color:T.sub,border:'1px solid '+T.border}},cd.name);
+                })
+              )
+            : React.createElement('div',{style:{fontSize:11,color:T.dim}},'No exercises in your library for this group')
+        );
+      }),
+      React.createElement('button',{
+        onClick:exportGaps,
+        style:{width:'100%',marginTop:12,padding:12,borderRadius:10,border:'none',background:GRAD.button,color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer',WebkitTapHighlightColor:'transparent'}
+      },'Build session \u2192 Export to Strong')
+    )
+  );
+}
+
 // ── DASHBOARD TAB ──────────────────────────────────────────────────────────────
-function DashboardTab({allLogs,workouts,schedule,restDefaults,customBp,setCustomBp,onNavigate}){
+function DashboardTab({allLogs,workouts,schedule,restDefaults,customBp,setCustomBp,onNavigate,profile,onSaveProfile}){
   const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const today=days[new Date().getDay()];
   const todayItem=schedule.find(s=>s.day===today);
@@ -2319,6 +2491,9 @@ function DashboardTab({allLogs,workouts,schedule,restDefaults,customBp,setCustom
       ),
       React.createElement('div',{style:{marginTop:12,fontSize:11,color:T.dim}},'Log in Strong, then import via Settings \u2192 Import CSV')
     ),
+
+    // Volume gap suggestions
+    React.createElement(VolumeGapCard,{allLogs,workouts,schedule,customBp,profile,onSaveProfile}),
 
     // Weekly volume
     React.createElement(WeeklyVolumeCard,{allLogs,customBp,setCustomBp}),
@@ -2669,7 +2844,7 @@ function PPLTracker(){
     ),
 
     // Tab content
-    tab==='dashboard'&&React.createElement(DashboardTab,{allLogs,workouts,schedule,restDefaults,customBp,setCustomBp,onNavigate:setTab}),
+    tab==='dashboard'&&React.createElement(DashboardTab,{allLogs,workouts,schedule,restDefaults,customBp,setCustomBp,onNavigate:setTab,profile,onSaveProfile:setProfile}),
 
     tab==='history'&&React.createElement(HistoryView,{
       allLogs,workouts,

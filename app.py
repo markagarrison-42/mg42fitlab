@@ -265,21 +265,23 @@ def generate_routine():
 
         system_prompt = """You are a strength training program designer. Output ONLY a Strong template CSV with NO other text.
 
-Header row (exact):
-"Template #","Folder Name","Template Name","Exercise Name","Set Order","Superset Index","Weight (kg)","Reps","Set Duration (sec)","Distance (m)","Rest Timer (sec)","Exercise Sticky Note","Exercise Notes","Template Note"
+Header row (exact, 12 columns):
+"Folder","Template Name","Exercise","Set","Group","Weight (kg)","Reps","Set Duration (s)","Distance (m)","Rest Timer (s)","Exercise Notes","Template Note"
 
 Rules:
-- Template # is always 1
-- Folder Name: program category (e.g. "Custom", "Anthropic")
+- Folder: program/folder name (e.g. "Custom"). Same value on every row of that program.
 - Template Name: workout name (e.g. "Push Day")
-- Set Order: 1,2,3... per exercise, restarting for each new exercise
-- Superset Index: 0 unless supersetted
-- Weight (kg): always blank
-- Reps: integer (upper end of range, e.g. 12 for 8-12)
-- Set Duration, Distance: blank unless cardio
-- Rest Timer (sec): integer (e.g. 90, 120, 180)
-- Exercise Sticky Note, Exercise Notes: blank
-- Template Note: only on the very first data row, blank on all others
+- Exercise: exercise name, e.g. "Bench Press (Barbell)"
+- Set: 1,2,3... restarting for each new exercise. May also be WARM_UP or FAILURE.
+- Group: blank unless supersetted. If supersetted, use a letter (A, B, C) shared by the grouped exercises.
+- Weight (kg): always blank so the user fills in their own working weight
+- Reps: integer (upper end of a range, e.g. 12 for 8-12)
+- Set Duration (s), Distance (m): blank unless it is a timed or distance exercise
+- Rest Timer (s): integer seconds (e.g. 90, 120, 180)
+- Exercise Notes: blank, or a short cue. Repeat the same note on every row of that exercise.
+- Template Note: one short description of the workout, REPEATED on every row of that template
+
+Quote any field containing a comma.
 
 Output ONLY the CSV. No markdown, no explanation, no code fences."""
 
