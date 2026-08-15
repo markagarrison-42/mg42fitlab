@@ -253,8 +253,16 @@ function inferBodyPart(name){
   // Calves
   if(/calf|calves|calf press|seated calf|standing calf|tibialis/.test(n))return'Calves';
   // Core
-  if(/ab |crunch|plank|russian twist|v.?up|side bend|core|oblique|cable crunch/.test(n))return'Core';
-  return'Quads';
+  if(/ab |crunch|plank|russian twist|v.?up|side bend|core|oblique|cable crunch|dead ?bug|hollow|flutter|leg raise|sit.?up|hanging|scissors|torso rotation/.test(n))return'Core';
+  // Push-ups and press-ups are chest-dominant
+  if(/push.?up|press.?up/.test(n))return'Chest';
+  // Carries and conditioning
+  if(/sled|tire flip|jumping jack|mountain climber|burpee|box jump|farmer/.test(n))return'Core';
+  // Neck work
+  if(/neck/.test(n))return'Traps';
+  // Unknown: do NOT guess a tracked group, that silently inflates volume targets.
+  // Lands in "Other" where it is visible and can be reassigned via the edit button.
+  return'Other';
 }
 function inferEquipment(name){
   const n=name.toLowerCase();
@@ -308,7 +316,7 @@ function getWeeklyVolume(allLogs,refDate,customBpOverride){
 }
 
 // Weekly volume targets (sets/week) — from Anthropic PPL Hypertrophy Restructure v2
-const TARGET_VOLUME={Chest:[20,24],Back:[22,26],Shoulders:[20,24],Biceps:[15,19],Triceps:[15,19],Quads:[16,20],Hamstrings:[14,18],Glutes:[14,18],Calves:[15,19],Core:null,Traps:[6,10]};
+const TARGET_VOLUME={Chest:[20,24],Back:[22,26],Shoulders:[20,24],Biceps:[15,19],Triceps:[15,19],Quads:[16,20],Hamstrings:[14,18],Glutes:[14,18],Calves:[15,19],Core:null,Traps:[6,10],Other:null};
 
 function WeeklyVolumeCard({allLogs,customBp,setCustomBp}){
   const[collapsed,setCollapsed]=useState(false);
@@ -322,13 +330,13 @@ function WeeklyVolumeCard({allLogs,customBp,setCustomBp}){
   var _vd=getWeeklyVolume(allLogs,refDate,customBp);
   var byBodyPart=_vd.byBodyPart;
   var byExercise=_vd.byExercise;
-  const bodyPartOrder=['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Calves','Glutes','Traps','Core'];
+  const bodyPartOrder=['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Calves','Glutes','Traps','Core','Other'];
   const entries=bodyPartOrder.filter(function(bp){return byBodyPart[bp]||TARGET_VOLUME.hasOwnProperty(bp);});
   const{start,end}=getWeekRange(refDate);
   const endDisplay=new Date(end.getTime()-1);
   const isCurrentWeek=weekOffset===0;
   const rangeLabel=start.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' \u2013 '+endDisplay.toLocaleDateString('en-US',{month:'short',day:'numeric'});
-  const BPOPTS=['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes','Calves','Core','Traps'];
+  const BPOPTS=['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes','Calves','Core','Traps','Other'];
   if(!entries.length)return null;
 
   function statusColor(count,target){
