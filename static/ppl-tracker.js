@@ -487,6 +487,104 @@ document.addEventListener('click',()=>getAudioCtx(),{once:true});
 let _pushSub=null;
 let _activeTimerJobId=null;
 
+// Parse a Strong TEMPLATE export (Folder, Template Name, Exercise, Set, ...).
+// Returns the same shape as parseFitLogRoutineCSV so it reuses the import preview.
+function parseStrongTemplateCSV(text){
+  var lines=text.trim().split(/\r?\n/);
+  if(lines.length<2)return null;
+  function parseLine(line){
+    var f=[],cur='',inQ=false;
+    for(var i=0;i<line.length;i++){
+      var ch=line[i];
+      if(ch==='"'){inQ=!inQ;}
+      else if(ch===','&&!inQ){f.push(cur.trim());cur='';}
+      else{cur+=ch;}
+    }
+    f.push(cur.trim());return f;
+  }
+  var header=parseLine(lines[0].replace(/^\uFEFF/,'')).map(function(h){return h.trim().replace(/^"|"$/g,'');});
+  function col(){
+    for(var i=0;i<arguments.length;i++){
+      var ix=header.indexOf(arguments[i]);
+      if(ix>=0)return ix;
+    }
+    return -1;
+  }
+  var iFolder=col('Folder','Folder Name');
+  var iTmpl=col('Template Name');
+  var iEx=col('Exercise','Exercise Name');
+  var iSet=col('Set','Set Order');
+  var iReps=col('Reps');
+  var iRest=col('Rest Timer (s)','Rest Timer (sec)');
+  var iNote=col('Template Note');
+  // Must look like a template export, not a workout history export
+  if(iTmpl<0||iEx<0)return null;
+  if(col('Workout Start Date','Date')>=0)return null;
+
+  function toId(n){return n.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');}
+  function wtypeOf(name){
+    var n=name.toLowerCase();
+    if(/push/.test(n))return'push';
+    if(/pull/.test(n))return'pull';
+    if(/leg|squat|lower/.test(n))return'legs';
+    if(/upper/.test(n))return'upper';
+    if(/core|ab |abs/.test(n))return'core';
+    return'other';
+  }
+  function repsOf(list){
+    var vals=list.filter(function(x){return x!=='';});
+    if(!vals.length)return'10';
+    var uniq={},n=[];
+    vals.forEach(function(v){if(!uniq[v]){uniq[v]=1;n.push(v);}});
+    if(n.length===1)return n[0];
+    var nums=vals.map(function(v){return parseInt(v)||0;});
+    var mn=Math.min.apply(null,nums),mx=Math.max.apply(null,nums);
+    if(mx-mn<=3)return mn+'-'+mx;      // near-uniform, express as a range
+    return vals.join('/');              // genuine ramp scheme
+  }
+
+  var routines={},order=[];
+  for(var r=1;r<lines.length;r++){
+    if(!lines[r].trim())continue;
+    var f=parseLine(lines[r]);
+    if(f.length<3)continue;
+    var tname=(f[iTmpl]||'').replace(/^"|"$/g,'').trim();
+    var exName=(f[iEx]||'').replace(/^"|"$/g,'').trim();
+    if(!tname||!exName)continue;
+
+    if(!routines[tname]){
+      routines[tname]={
+        note:(iNote>=0&&f[iNote]?f[iNote].replace(/^"|"$/g,'').trim():''),
+        folder:(iFolder>=0&&f[iFolder]?f[iFolder].replace(/^"|"$/g,'').trim():''),
+        wtype:wtypeOf(tname),
+        exercises:[],_idx:{}
+      };
+      order.push(tname);
+    }
+    var R=routines[tname];
+    if(!R._idx[exName]){
+      R._idx[exName]={id:toId(exName),name:exName,_reps:[],
+        _rest:(iRest>=0&&f[iRest]?parseInt(f[iRest])||0:0)};
+      R.exercises.push(R._idx[exName]);
+    }
+    var setVal=(iSet>=0&&f[iSet]?String(f[iSet]).trim().toUpperCase():'');
+    if(setVal==='W'||setVal==='WARM_UP')continue;   // warmups don't count as working sets
+    R._idx[exName]._reps.push(iReps>=0&&f[iReps]?String(f[iReps]).trim():'');
+  }
+
+  if(!order.length)return null;
+  var out={};
+  order.forEach(function(t){
+    var R=routines[t];
+    var exs=R.exercises.map(function(e){
+      return{id:e.id,name:e.name,sets:Math.max(1,e._reps.length),reps:repsOf(e._reps),_rest:e._rest};
+    }).filter(function(e){return e.sets>0;});
+    if(!exs.length)return;
+    out[t]={note:R.note,folder:R.folder,wtype:R.wtype,exercises:exs};
+  });
+  return Object.keys(out).length?out:null;
+}
+
 function parseStrongCSV(text){
   const lines=text.trim().split(/\r?\n/);if(!lines.length)return null;
   function parseLine(line){const fields=[];let cur='',inQ=false;for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'){inQ=!inQ;}else if(c===','&&!inQ){fields.push(cur.trim());cur='';}else{cur+=c;}}fields.push(cur.trim());return fields;}
@@ -1669,8 +1767,21 @@ function getVolumeSuggestions(allLogs,workouts,schedule,customBp){
     return (customBp&&customBp[ex.id])?customBp[ex.id]:inferBodyPart(ex.name);
   }
 
+  // Has anything been logged today? If so today's session is already reflected in
+  // byBodyPart, so counting it again as upcoming coverage would double-count it.
+  var todayStr=localDateStr(new Date());
+  var trainedToday=false;
+  Object.keys(allLogs).forEach(function(exId){
+    if(trainedToday)return;
+    (allLogs[exId]||[]).forEach(function(e){
+      if(!e||!e.date)return;
+      if(localDateStr(new Date(e.date))===todayStr)trainedToday=true;
+    });
+  });
+
   var remaining=[];
   for(var i=todayIdx;i<7;i++){
+    if(i===todayIdx&&trainedToday)continue;
     var it=(schedule||[]).find(function(s){return s.day===days[i];});
     if(it&&it.workoutKey&&workouts[it.workoutKey]){
       remaining.push({day:days[i],key:it.workoutKey,w:workouts[it.workoutKey],isToday:i===todayIdx});
@@ -1707,21 +1818,28 @@ function getVolumeSuggestions(allLogs,workouts,schedule,customBp){
       });
     });
 
-    var stillShort=(lo-done)-scheduled;
-    if(stillShort<=0)return;
+    var short=lo-done;
+    var stillShort=short-scheduled;
 
     var cands=pool[bp]?Object.keys(pool[bp]).map(function(id){return pool[bp][id];}):[];
     cands.sort(function(a,b){return b.uses-a.uses;});
 
     gaps.push({
       bodyPart:bp,done:done,target:lo,
-      scheduled:scheduled,stillShort:stillShort,
+      scheduled:scheduled,
+      short:short,
+      stillShort:stillShort,
+      covered:stillShort<=0,
       candidates:cands.slice(0,3)
     });
   });
 
   if(!gaps.length)return null;
-  gaps.sort(function(a,b){return b.stillShort-a.stillShort;});
+  // Uncovered gaps first, then by size of shortfall
+  gaps.sort(function(a,b){
+    if(a.covered!==b.covered)return a.covered?1:-1;
+    return b.short-a.short;
+  });
   return{gaps:gaps.slice(0,6),next:next,daysLeft:remaining.length};
 }
 
@@ -1947,6 +2065,14 @@ function MacroCard({profile,onSaveProfile}){
   const[wIn,setWIn]=useState('');
   const[unitIn,setUnitIn]=useState('lb');
   const[calIn,setCalIn]=useState('');
+  const[sexIn,setSexIn]=useState('male');
+  const[ageIn,setAgeIn]=useState('');
+  const[ftIn,setFtIn]=useState('');
+  const[inIn,setInIn]=useState('');
+  const[cmIn,setCmIn]=useState('');
+  const[actIn,setActIn]=useState(1.55);
+  const[adjIn,setAdjIn]=useState(0);
+  const[manualCal,setManualCal]=useState(false);
   const[freqFoods,setFreqFoods]=useState([]);
   const[foodSearch,setFoodSearch]=useState('');
 
@@ -2042,36 +2168,127 @@ function MacroCard({profile,onSaveProfile}){
   }
 
   if(showSetup||!bw||!calTarget){
-    var prevCal=wIn?(unitIn==='kg'?Math.round(parseFloat(wIn)*2.205):Math.round(parseFloat(wIn))):null;
+    // Mifflin-St Jeor
+    var _w=parseFloat(wIn)||0;
+    var _kg=unitIn==='kg'?_w:_w*0.4536;
+    var _cm=0;
+    if(unitIn==='kg'){_cm=parseFloat(cmIn)||0;}
+    else{_cm=((parseFloat(ftIn)||0)*12+(parseFloat(inIn)||0))*2.54;}
+    var _age=parseInt(ageIn)||0;
+    var _bmr=(_kg&&_cm&&_age)
+      ? Math.round(10*_kg+6.25*_cm-5*_age+(sexIn==='male'?5:-161))
+      : 0;
+    var _tdee=_bmr?Math.round(_bmr*actIn):0;
+    var _target=_tdee?Math.round(_tdee*(1+(adjIn/100))):0;
+    var _ready=_bmr>0;
+
+    var ACT=[
+      {v:1.2,  l:'Sedentary',        d:'little or no exercise'},
+      {v:1.375,l:'Light',            d:'exercise 1-3x/week'},
+      {v:1.465,l:'Moderate',         d:'exercise 4-5x/week'},
+      {v:1.55, l:'Active',           d:'daily or intense 3-4x/week'},
+      {v:1.725,l:'Very active',      d:'intense 6-7x/week'},
+      {v:1.9,  l:'Extra active',     d:'very intense daily / physical job'}
+    ];
+    var ADJ=[
+      {v:-20,l:'-20%'},{v:-15,l:'-15%'},{v:-10,l:'-10%'},
+      {v:0,l:'Maintain'},{v:10,l:'+10%'}
+    ];
+
+    function fld(label,node){
+      return React.createElement('div',{style:{marginBottom:12}},
+        React.createElement('div',{style:{fontSize:11,color:T.dim,marginBottom:6,fontWeight:600}},label),
+        node
+      );
+    }
+    var inpS={width:'100%',padding:'11px 14px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:9,color:T.text,fontSize:15,fontFamily:T.mono};
+
     return React.createElement('div',{style:{margin:'0 16px 12px',background:T.bg2,borderRadius:14,border:'1px solid '+T.border,padding:'16px'}},
       React.createElement('div',{style:{fontSize:14,fontWeight:700,color:T.text,marginBottom:4}},'Macro Tracker Setup'),
-      React.createElement('div',{style:{fontSize:12,color:T.dim,marginBottom:14,lineHeight:1.5}},'Enter your bodyweight and daily calorie target. Protein, fat and carb targets are derived automatically.'),
-      React.createElement('div',{style:{fontSize:11,color:T.dim,marginBottom:6,fontWeight:600}},'Bodyweight'),
-      React.createElement('div',{style:{display:'flex',gap:8,marginBottom:12}},
-        React.createElement('input',{type:'number',inputMode:'decimal',placeholder:'Weight',value:wIn,onChange:function(e){setWIn(e.target.value);},style:{flex:1,padding:'11px 14px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:9,color:T.text,fontSize:15,fontFamily:T.mono}}),
+      React.createElement('div',{style:{fontSize:12,color:T.dim,marginBottom:14,lineHeight:1.5}},'Your calorie target is calculated from BMR, activity level and a percentage adjustment. Protein, fat and carbs are derived from bodyweight.'),
+
+      fld('Sex',React.createElement('div',{style:{display:'flex',gap:6}},
+        ['male','female'].map(function(sx){
+          var a=sexIn===sx;
+          return React.createElement('button',{key:sx,onClick:function(){setSexIn(sx);},style:{flex:1,padding:'10px',borderRadius:9,border:'1px solid '+(a?'rgba(124,58,237,0.5)':T.border2),background:a?'rgba(124,58,237,0.2)':'transparent',color:a?'#a78bfa':T.sub,fontSize:13,fontWeight:a?700:400,cursor:'pointer',WebkitTapHighlightColor:'transparent',textTransform:'capitalize'}},sx);
+        })
+      )),
+
+      fld('Age',React.createElement('input',{type:'number',inputMode:'numeric',placeholder:'46',value:ageIn,onChange:function(e){setAgeIn(e.target.value);},style:inpS})),
+
+      fld('Height',unitIn==='kg'
+        ? React.createElement('input',{type:'number',inputMode:'decimal',placeholder:'cm',value:cmIn,onChange:function(e){setCmIn(e.target.value);},style:inpS})
+        : React.createElement('div',{style:{display:'flex',gap:8}},
+            React.createElement('input',{type:'number',inputMode:'numeric',placeholder:'ft',value:ftIn,onChange:function(e){setFtIn(e.target.value);},style:Object.assign({},inpS,{flex:1})}),
+            React.createElement('input',{type:'number',inputMode:'numeric',placeholder:'in',value:inIn,onChange:function(e){setInIn(e.target.value);},style:Object.assign({},inpS,{flex:1})})
+          )
+      ),
+
+      fld('Bodyweight',React.createElement('div',{style:{display:'flex',gap:8}},
+        React.createElement('input',{type:'number',inputMode:'decimal',placeholder:'Weight',value:wIn,onChange:function(e){setWIn(e.target.value);},style:Object.assign({},inpS,{flex:1})}),
         React.createElement('div',{style:{display:'flex',gap:4}},
           ['lb','kg'].map(function(u){
             var a=unitIn===u;
             return React.createElement('button',{key:u,onClick:function(){setUnitIn(u);},style:{padding:'11px 16px',borderRadius:9,border:'1px solid '+(a?'rgba(124,58,237,0.5)':T.border2),background:a?'rgba(124,58,237,0.2)':'transparent',color:a?'#a78bfa':T.sub,fontSize:14,fontWeight:a?700:400,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},u);
           })
         )
+      )),
+
+      fld('Activity level',React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:5}},
+        ACT.map(function(a){
+          var on=Math.abs(actIn-a.v)<0.001;
+          return React.createElement('button',{key:a.v,onClick:function(){setActIn(a.v);},style:{display:'flex',alignItems:'center',gap:8,padding:'9px 11px',borderRadius:8,border:'1px solid '+(on?'rgba(124,58,237,0.5)':T.border),background:on?'rgba(124,58,237,0.15)':T.bg3,cursor:'pointer',textAlign:'left',WebkitTapHighlightColor:'transparent'}},
+            React.createElement('div',{style:{flex:1}},
+              React.createElement('div',{style:{fontSize:12,fontWeight:on?700:600,color:on?'#a78bfa':T.text}},a.l),
+              React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1}},a.d)
+            ),
+            _bmr?React.createElement('div',{style:{fontSize:11,color:T.dim,fontFamily:T.mono}},Math.round(_bmr*a.v)):null
+          );
+        })
+      )),
+
+      fld('Goal',React.createElement('div',null,
+        React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:5,marginBottom:6}},
+          ADJ.map(function(a){
+            var on=adjIn===a.v;
+            return React.createElement('button',{key:a.v,onClick:function(){setAdjIn(a.v);},style:{flex:'1 1 auto',padding:'9px 10px',borderRadius:8,border:'1px solid '+(on?'rgba(124,58,237,0.5)':T.border2),background:on?'rgba(124,58,237,0.2)':'transparent',color:on?'#a78bfa':T.sub,fontSize:12,fontWeight:on?700:400,cursor:'pointer',WebkitTapHighlightColor:'transparent',whiteSpace:'nowrap'}},a.l);
+          })
+        ),
+        React.createElement('input',{type:'number',inputMode:'numeric',placeholder:'custom %  (e.g. -12)',value:String(adjIn),onChange:function(e){setAdjIn(parseInt(e.target.value)||0);},style:Object.assign({},inpS,{fontSize:13})})
+      )),
+
+      _ready&&React.createElement('div',{style:{padding:'12px 14px',background:T.bg3,borderRadius:10,marginBottom:12}},
+        React.createElement('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:4}},
+          React.createElement('div',{style:{fontSize:11,color:T.dim}},'BMR'),
+          React.createElement('div',{style:{fontSize:12,color:T.sub,fontFamily:T.mono}},_bmr+' cal')
+        ),
+        React.createElement('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:4}},
+          React.createElement('div',{style:{fontSize:11,color:T.dim}},'TDEE (x'+actIn+')'),
+          React.createElement('div',{style:{fontSize:12,color:T.sub,fontFamily:T.mono}},_tdee+' cal')
+        ),
+        React.createElement('div',{style:{display:'flex',justifyContent:'space-between',paddingTop:6,borderTop:'1px solid '+T.border}},
+          React.createElement('div',{style:{fontSize:12,color:T.text,fontWeight:700}},'Target'+(adjIn?' ('+(adjIn>0?'+':'')+adjIn+'%)':'')),
+          React.createElement('div',{style:{fontSize:15,color:'#a78bfa',fontWeight:700,fontFamily:T.mono}},_target+' cal')
+        ),
+        React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:8,lineHeight:1.5}},
+          'Protein '+Math.round(unitIn==='kg'?_w*2.205:_w)+'g \u00b7 Fat '+Math.round((unitIn==='kg'?_w*2.205:_w)*0.35)+'g \u00b7 Carbs '+Math.max(0,Math.round((_target-(Math.round(unitIn==='kg'?_w*2.205:_w)*4)-(Math.round((unitIn==='kg'?_w*2.205:_w)*0.35)*9))/4))+'g'
+        )
       ),
-      React.createElement('div',{style:{fontSize:11,color:T.dim,marginBottom:6,fontWeight:600}},'Daily calorie target'),
-      React.createElement('input',{type:'number',inputMode:'numeric',placeholder:'e.g. 2600',value:calIn,onChange:function(e){setCalIn(e.target.value);},style:{width:'100%',padding:'11px 14px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:9,color:T.text,fontSize:15,fontFamily:T.mono,marginBottom:12}}),
-      (wIn&&calIn)&&React.createElement('div',{style:{fontSize:12,color:T.muted,marginBottom:12,lineHeight:1.6,padding:'10px 12px',background:T.bg3,borderRadius:8}},
-        'Targets: '+calIn+' cal \u00b7 '+prevCal+'g protein \u00b7 '+Math.round(prevCal*0.35)+'g fat \u00b7 '+Math.max(0,Math.round((parseInt(calIn)-(prevCal*4)-(Math.round(prevCal*0.35)*9))/4))+'g carbs'
-      ),
+
       React.createElement('div',{style:{display:'flex',gap:8}},
         (bw&&calTarget)&&React.createElement('button',{onClick:function(){setShowSetup(false);},style:{flex:1,padding:12,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:14,cursor:'pointer'}},'Cancel'),
         React.createElement('button',{
           onClick:function(){
-            var w=parseFloat(wIn),cal=parseInt(calIn);
-            if(!w||w<=0||!cal||cal<=0)return;
-            onSaveProfile(Object.assign({},profile||{},{bodyweight:w,weightUnit:unitIn,calorieTarget:cal}));
+            if(!_ready)return;
+            onSaveProfile(Object.assign({},profile||{},{
+              bodyweight:_w,weightUnit:unitIn,calorieTarget:_target,
+              sex:sexIn,age:_age,heightCm:Math.round(_cm),
+              activity:actIn,calorieAdjust:adjIn,bmr:_bmr,tdee:_tdee
+            }));
             setShowSetup(false);
           },
-          disabled:!wIn||!calIn,
-          style:{flex:2,padding:12,borderRadius:9,border:'none',background:(wIn&&calIn)?GRAD.button:'rgba(124,58,237,0.2)',color:'#fff',fontWeight:700,fontSize:14,cursor:(wIn&&calIn)?'pointer':'default'}
+          disabled:!_ready,
+          style:{flex:2,padding:12,borderRadius:9,border:'none',background:_ready?GRAD.button:'rgba(124,58,237,0.2)',color:'#fff',fontWeight:700,fontSize:14,cursor:_ready?'pointer':'default'}
         },'Save')
       )
     );
@@ -2149,7 +2366,21 @@ function MacroCard({profile,onSaveProfile}){
       }),
       !showAdd&&React.createElement('div',{style:{display:'flex',gap:8,marginTop:10}},
         React.createElement('button',{onClick:function(){setShowAdd(true);},style:{flex:1,padding:10,borderRadius:9,border:'none',background:GRAD.button,color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'+ Log Meal'),
-        React.createElement('button',{onClick:function(){setWIn(String(bw));setUnitIn(unit);setCalIn(String(calTarget));setShowSetup(true);},style:{padding:'10px 12px',borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.dim,fontSize:12,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'\u2699')
+        React.createElement('button',{onClick:function(){
+          setWIn(String(bw));setUnitIn(unit);setCalIn(String(calTarget));
+          setSexIn((profile&&profile.sex)||'male');
+          setAgeIn((profile&&profile.age)?String(profile.age):'');
+          setActIn((profile&&profile.activity)||1.55);
+          setAdjIn((profile&&profile.calorieAdjust)||0);
+          var hcm=(profile&&profile.heightCm)||0;
+          if(hcm){
+            setCmIn(String(hcm));
+            var ti=hcm/2.54;
+            setFtIn(String(Math.floor(ti/12)));
+            setInIn(String(Math.round(ti%12)));
+          }
+          setShowSetup(true);
+        },style:{padding:'10px 12px',borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.dim,fontSize:12,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'\u2699')
       ),
       showAdd&&React.createElement('div',{style:{marginTop:10}},
         freqFoods.length>0&&React.createElement('div',{style:{marginBottom:12}},
@@ -2330,6 +2561,8 @@ function VolumeGapCard({allLogs,workouts,schedule,customBp,profile,onSaveProfile
   var visible=sug.gaps.filter(function(g){return dismissed.indexOf(g.bodyPart)<0;});
   if(!visible.length)return null;
 
+  var anyUncovered=visible.some(function(g){return !g.covered;});
+
   function dismiss(bp){
     var next=dismissed.concat([bp]);
     onSaveProfile(Object.assign({},profile||{},{gapDismissals:{week:weekKey,groups:next}}));
@@ -2347,7 +2580,7 @@ function VolumeGapCard({allLogs,workouts,schedule,customBp,profile,onSaveProfile
       var pick=g.candidates[0];
       if(!pick||seen[pick.id])return;
       seen[pick.id]=true;
-      var sets=Math.max(1,Math.min(6,g.stillShort));
+      var sets=Math.max(1,Math.min(6,g.short));
       var rest=rd[pick.id]||rd._default||120;
       var repsStr=pick.reps||'10-12';
       var parts=String(repsStr).split('-');
@@ -2370,10 +2603,10 @@ function VolumeGapCard({allLogs,workouts,schedule,customBp,profile,onSaveProfile
     return React.createElement('div',{style:{margin:'0 16px 12px'}},
       React.createElement('button',{
         onClick:function(){setOpen(true);},
-        style:{width:'100%',padding:'13px 16px',borderRadius:12,border:'1px solid rgba(251,191,36,0.3)',background:'rgba(251,191,36,0.07)',color:'#fbbf24',fontSize:13,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent',textAlign:'left',display:'flex',alignItems:'center',gap:10}
+        style:{width:'100%',padding:'13px 16px',borderRadius:12,border:'1px solid '+(anyUncovered?'rgba(251,191,36,0.3)':T.border),background:anyUncovered?'rgba(251,191,36,0.07)':T.bg2,color:anyUncovered?'#fbbf24':T.sub,fontSize:13,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent',textAlign:'left',display:'flex',alignItems:'center',gap:10}
       },
-        React.createElement('span',{style:{fontSize:15}},'\u26A0\uFE0F'),
-        React.createElement('span',{style:{flex:1}},'Show suggestions \u00b7 '+visible.length+' muscle group'+(visible.length>1?'s':'')+' behind'),
+        React.createElement('span',{style:{fontSize:15}},anyUncovered?'\u26A0\uFE0F':'\uD83D\uDCC9'),
+        React.createElement('span',{style:{flex:1}},'Show suggestions \u00b7 '+visible.length+' group'+(visible.length>1?'s':'')+' under target'),
         React.createElement('span',{style:{fontSize:12,opacity:0.7}},'\u2304')
       )
     );
@@ -2394,8 +2627,10 @@ function VolumeGapCard({allLogs,workouts,schedule,customBp,profile,onSaveProfile
           React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:6}},
             React.createElement('div',{style:{flex:1}},
               React.createElement('div',{style:{fontSize:13,fontWeight:600,color:T.text}},g.bodyPart),
-              React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1,fontFamily:T.mono}},
-                g.done+'/'+g.target+' done'+(g.scheduled?' \u00b7 '+g.scheduled+' scheduled':'')+' \u00b7 '+g.stillShort+' short'
+              React.createElement('div',{style:{fontSize:10,color:g.covered?'#34d399':T.dim,marginTop:1,fontFamily:T.mono}},
+                g.done+'/'+g.target+' \u00b7 '+g.short+' short'+
+                (g.scheduled?' \u00b7 '+g.scheduled+' scheduled':'')+
+                (g.covered?' \u00b7 covered':' \u00b7 '+g.stillShort+' uncovered')
               )
             ),
             React.createElement('button',{
@@ -2438,6 +2673,17 @@ function DashboardTab({allLogs,workouts,schedule,restDefaults,customBp,setCustom
     if(thisWeek.length) recentPRs.push({exId,name:entries[0].exName||exId.replace(/_/g,' '),e1rm:maxE1rm,date:thisWeek[0].date});
   });
   recentPRs.sort((a,b)=>new Date(b.date)-new Date(a.date));
+
+  // Did any set get logged today?
+  var _todayStr=localDateStr(new Date());
+  var trainedToday=false;
+  Object.keys(allLogs).forEach(function(exId){
+    if(trainedToday)return;
+    (allLogs[exId]||[]).forEach(function(e){
+      if(!e||!e.date)return;
+      if(localDateStr(new Date(e.date))===_todayStr)trainedToday=true;
+    });
+  });
 
   // ── EMPTY STATE: no imported history yet ──────────────────────────────────
   var loggedSetCount=0;
@@ -2489,7 +2735,7 @@ function DashboardTab({allLogs,workouts,schedule,restDefaults,customBp,setCustom
   return React.createElement('div',{style:{paddingBottom:80}},
     // Today's workout reference card
     todayWorkout&&React.createElement('div',{style:{margin:'16px 16px 12px',padding:'16px 18px',background:'linear-gradient(135deg,'+(CAT[todayWorkout.category]||'#06b6d4')+'22,'+(CAT[todayWorkout.category]||'#06b6d4')+'08)',borderRadius:16,border:'1px solid '+(CAT[todayWorkout.category]||'#06b6d4')+'40'}},
-      React.createElement('div',{style:{fontSize:10,color:CAT[todayWorkout.category]||'#06b6d4',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:4}},'Today \u00b7 '+today),
+      React.createElement('div',{style:{fontSize:10,color:trainedToday?'#34d399':(CAT[todayWorkout.category]||'#06b6d4'),fontWeight:700,textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:4}},trainedToday?('\u2713 Logged \u00b7 '+today):('Today \u00b7 '+today)),
       React.createElement('div',{style:{fontSize:20,fontWeight:800,color:T.text,marginBottom:12}},todayWorkout.label),
       React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:4}},
         (todayWorkout.exercises||[]).map((ex,i)=>React.createElement('div',{key:i,style:{display:'flex',justifyContent:'space-between',fontSize:13,color:T.sub}},
@@ -2497,7 +2743,7 @@ function DashboardTab({allLogs,workouts,schedule,restDefaults,customBp,setCustom
           React.createElement('div',{style:{fontFamily:T.mono,color:T.dim}},ex.sets+'×'+ex.reps)
         ))
       ),
-      React.createElement('div',{style:{marginTop:12,fontSize:11,color:T.dim}},'Log in Strong, then import via Settings \u2192 Import CSV')
+      React.createElement('div',{style:{marginTop:12,fontSize:11,color:trainedToday?'#34d399':T.dim}},trainedToday?'Already logged today':'Log in Strong, then import via Settings \u2192 Import CSV')
     ),
 
     // Volume gap suggestions
@@ -2789,7 +3035,7 @@ function PPLTracker(){
         updatedCount++;
       }else{
         const key='custom_'+r.label.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')+'_'+Date.now();
-        updated[key]={label:r.label,tag:'Custom',category:r.wtype==='other'?'pull':r.wtype,gym:'anthropic',wtype:r.wtype,note:r.note||'',exercises:r.exercises};
+        updated[key]={label:r.label,tag:'Custom',category:r.wtype==='other'?'pull':r.wtype,gym:r.folder?r.folder.toLowerCase().replace(/[^a-z0-9]+/g,'_'):'anthropic',wtype:r.wtype,note:r.note||'',exercises:r.exercises};
         created++;
       }
     });
@@ -2804,17 +3050,23 @@ function PPLTracker(){
       const text=ev.target.result;
       try{const data=JSON.parse(text);if(data.exercises)setWorkouts({...workouts,['custom_'+Date.now()]:data});else setWorkouts({...workouts,...data});setImportResult({type:'json',message:'FitLog routine imported.'});return;}catch{}
       const fitlogRoutines=parseFitLogRoutineCSV(text);
-      console.log('fitlogRoutines result:',fitlogRoutines,'text length:',text.length,'first 100:',text.slice(0,100));
       if(fitlogRoutines){
         const preview=Object.entries(fitlogRoutines).map(([label,r])=>{
           const existingEntry=Object.entries(workouts).find(([k,w])=>w.label&&w.label.toLowerCase()===label.toLowerCase());
           const existingKey=existingEntry?existingEntry[0]:null;
-          console.log('routine:',label,'existingKey:',existingKey,'exercises:',r.exercises.length);
           return{label,note:r.note,wtype:r.wtype,exercises:r.exercises,existingKey,willUpdate:!!existingKey};
         });
         setPendingRoutineImport({preview});return;
       }
-      console.log('parseFitLogRoutineCSV returned null/falsy');
+      const strongTemplates=parseStrongTemplateCSV(text);
+      if(strongTemplates){
+        const tPreview=Object.entries(strongTemplates).map(([label,r])=>{
+          const hit=Object.entries(workouts).find(([k,w])=>w.label&&w.label.toLowerCase()===label.toLowerCase());
+          return{label,note:r.note,wtype:r.wtype,folder:r.folder,exercises:r.exercises,
+                 existingKey:hit?hit[0]:null,willUpdate:!!hit};
+        });
+        setPendingRoutineImport({preview:tPreview});return;
+      }
       const parsed=parseStrongCSV(text);
       if(!parsed){setImportResult({type:'error',message:'Unrecognised file format.'});return;}
       const newRoutines=Object.keys(parsed.workouts).filter(k=>!PROTECTED_KEYS.has(k)&&!workouts[k]).length;
