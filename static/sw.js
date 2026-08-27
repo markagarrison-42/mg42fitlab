@@ -1,28 +1,59 @@
-const CACHE = 'fitlog-v2';
+// Bump this on every deploy that changes app code.
+const CACHE = 'fitlog-v3';
+
+// Only genuinely immutable, versioned third-party libs get precached.
 const PRECACHE = [
-  '/',
-  '/static/ppl-tracker.js',
   'https://unpkg.com/react@18/umd/react.production.min.js',
   'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
-  'https://unpkg.com/@babel/standalone/babel.min.js',
 ];
 
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting())
+    caches.open(CACHE)
+      .then(c => Promise.allSettled(PRECACHE.map(u => c.add(u))))
+      .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', e => {
-  if (e.request.url.includes('/api/')) return;
+  const url = e.request.url;
+
+  // Never touch API or auth traffic.
+  if (url.includes('/api/') || url.includes('supabase')) return;
+  if (e.request.method !== 'GET') return;
+
+  const isAppCode =
+    e.request.mode === 'navigate' ||
+    url.includes('/static/ppl-tracker.js') ||
+    url.endsWith('/') ||
+    url.includes('/static/sw.js');
+
+  if (isAppCode) {
+    // NETWORK FIRST. Stale app code has caused data loss before - never serve
+    // it when the network is available. Cache is a fallback for offline only.
+    e.respondWith(
+      fetch(e.request)
+        .then(res => {
+          if (res && res.status === 200 && res.type !== 'opaque') {
+            const clone = res.clone();
+            caches.open(CACHE).then(c => c.put(e.request, clone));
+          }
+          return res;
+        })
+        .catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // Everything else (icons, fonts, versioned CDN libs): cache first is fine.
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
@@ -37,7 +68,7 @@ self.addEventListener('fetch', e => {
 });
 
 self.addEventListener('push', e => {
-  let data = { title: 'FitLog', body: 'Rest timer done!', url: '/' };
+  let data = { title: 'FitLog', body: 'Notification', url: '/' };
   try { if (e.data) data = e.data.json(); } catch {}
   e.waitUntil(
     self.registration.showNotification(data.title, {
@@ -45,7 +76,7 @@ self.addEventListener('push', e => {
       icon: '/static/icon-192.png',
       badge: '/static/icon-192.png',
       vibrate: [200, 100, 200],
-      tag: 'fitlog-timer',
+      tag: 'fitlog',
       renotify: true,
       data: { url: data.url || '/' }
     })
@@ -57,7 +88,7 @@ self.addEventListener('notificationclick', e => {
   e.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
       for (const client of list) {
-        if (client.url.includes('fit.mg42health.com') && 'focus' in client) {
+        if (client.url.includes('fitlog.mg42apps.com') && 'focus' in client) {
           return client.focus();
         }
       }

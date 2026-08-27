@@ -2663,8 +2663,15 @@ function VolumeGapCard({allLogs,workouts,schedule,customBp,profile,onSaveProfile
 // ── DASHBOARD TAB ──────────────────────────────────────────────────────────────
 function DashboardTab({allLogs,workouts,schedule,restDefaults,customBp,setCustomBp,onNavigate,profile,onSaveProfile}){
   const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const[dayOffset,setDayOffset]=useState(0);
   const today=days[new Date().getDay()];
-  const todayItem=schedule.find(s=>s.day===today);
+  const viewDate=new Date();viewDate.setDate(viewDate.getDate()+dayOffset);
+  const viewDay=days[viewDate.getDay()];
+  const isViewingToday=dayOffset===0;
+  const dayLabel=isViewingToday?('Today \u00b7 '+viewDay)
+    :(dayOffset===1?('Tomorrow \u00b7 '+viewDay)
+    :viewDate.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'}));
+  const todayItem=schedule.find(s=>s.day===viewDay);
   const todayWorkout=todayItem&&todayItem.workoutKey?workouts[todayItem.workoutKey]:null;
 
   // Recent PRs from this week
@@ -2740,7 +2747,15 @@ function DashboardTab({allLogs,workouts,schedule,restDefaults,customBp,setCustom
   return React.createElement('div',{style:{paddingBottom:80}},
     // Today's workout reference card
     todayWorkout&&React.createElement('div',{style:{margin:'16px 16px 12px',padding:'16px 18px',background:'linear-gradient(135deg,'+(CAT[todayWorkout.category]||'#06b6d4')+'22,'+(CAT[todayWorkout.category]||'#06b6d4')+'08)',borderRadius:16,border:'1px solid '+(CAT[todayWorkout.category]||'#06b6d4')+'40'}},
-      React.createElement('div',{style:{fontSize:10,color:trainedToday?'#34d399':(CAT[todayWorkout.category]||'#06b6d4'),fontWeight:700,textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:4}},trainedToday?('\u2713 Logged \u00b7 '+today):('Today \u00b7 '+today)),
+      React.createElement('div',{style:{display:'flex',alignItems:'flex-start',gap:8,marginBottom:4}},
+        React.createElement('div',{style:{flex:1,fontSize:10,color:(isViewingToday&&trainedToday)?'#34d399':(CAT[todayWorkout.category]||'#06b6d4'),fontWeight:700,textTransform:'uppercase',letterSpacing:'0.1em'}},
+          (isViewingToday&&trainedToday)?('\u2713 Logged \u00b7 '+viewDay):dayLabel
+        ),
+        React.createElement('div',{style:{display:'flex',gap:4,flexShrink:0}},
+          dayOffset>0&&React.createElement('button',{onClick:function(){setDayOffset(function(o){return o-1;});},style:{width:24,height:24,borderRadius:6,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:14,cursor:'pointer',lineHeight:1,WebkitTapHighlightColor:'transparent'}},'\u2039'),
+          React.createElement('button',{onClick:function(){setDayOffset(function(o){return Math.min(o+1,6);});},style:{width:24,height:24,borderRadius:6,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:14,cursor:'pointer',lineHeight:1,WebkitTapHighlightColor:'transparent'}},'\u203a')
+        )
+      ),
       React.createElement('div',{style:{fontSize:20,fontWeight:800,color:T.text,marginBottom:12}},todayWorkout.label),
       React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:4}},
         (todayWorkout.exercises||[]).map((ex,i)=>React.createElement('div',{key:i,style:{display:'flex',justifyContent:'space-between',fontSize:13,color:T.sub}},
@@ -2748,7 +2763,9 @@ function DashboardTab({allLogs,workouts,schedule,restDefaults,customBp,setCustom
           React.createElement('div',{style:{fontFamily:T.mono,color:T.dim}},ex.sets+'×'+ex.reps)
         ))
       ),
-      React.createElement('div',{style:{marginTop:12,fontSize:11,color:trainedToday?'#34d399':T.dim}},trainedToday?'Already logged today':'Log in Strong, then import via Settings \u2192 Import CSV')
+      React.createElement('div',{style:{marginTop:12,fontSize:11,color:(isViewingToday&&trainedToday)?'#34d399':T.dim}},
+        isViewingToday?(trainedToday?'Already logged today':'Log in Strong, then import via Settings \u2192 Import CSV'):'Upcoming'
+      )
     ),
 
     // Volume gap suggestions
@@ -2810,6 +2827,7 @@ function parseFitLogRoutineCSV(text){
 }
 
 function ScheduleTab({schedule,workouts,onSave}){
+  const[expandedDay,setExpandedDay]=useState(null);
   const[editing,setEditing]=useState(false);
   const[draft,setDraft]=useState(schedule);
   const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -2862,31 +2880,70 @@ function ScheduleTab({schedule,workouts,onSave}){
     );
   }
 
+  var HDR={padding:'16px 16px 12px',display:'flex',alignItems:'center',justifyContent:'space-between'};
+  var TTL={fontSize:20,fontWeight:700,color:T.text};
+  var EDB={padding:'8px 14px',borderRadius:9,border:'1px solid '+T.border2,
+    background:'transparent',color:T.sub,fontSize:13,cursor:'pointer'};
   // Read-only view
   return React.createElement('div',{style:{paddingBottom:100}},
-    React.createElement('div',{style:{padding:'16px 16px 12px',display:'flex',alignItems:'center',justifyContent:'space-between'}},
-      React.createElement('div',{style:{fontSize:20,fontWeight:700,color:T.text}},'Schedule'),
-      React.createElement('button',{onClick:function(){setDraft(schedule);setEditing(true);},style:{padding:'8px 14px',borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:13,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'Edit')
+    React.createElement('div',{style:HDR},
+      React.createElement('div',{style:TTL},'Schedule'),
+      React.createElement('button',{onClick:function(){setDraft(schedule);setEditing(true);},style:EDB},'Edit')
     ),
     React.createElement('div',{style:{padding:'0 16px'}},
       days.map(function(day){
         var item=schedule.find(function(s){return s.day===day;});
         var workout=item&&item.workoutKey?workouts[item.workoutKey]:null;
         var isToday=day===today;
-        var accent=workout?CAT[workout.category]||'#06b6d4':'rgba(148,163,184,0.15)';
-        return React.createElement('div',{key:day,style:{marginBottom:8,padding:'14px 16px',background:isToday?'rgba(124,58,237,0.08)':T.bg2,borderRadius:12,border:'1px solid '+(isToday?'rgba(124,58,237,0.4)':T.border),display:'flex',alignItems:'center',gap:14}},
-          React.createElement('div',{style:{width:3,borderRadius:2,alignSelf:'stretch',background:accent,flexShrink:0}}),
-          React.createElement('div',{style:{flex:1}},
-            React.createElement('div',{style:{fontSize:12,color:isToday?'#a78bfa':T.dim,fontWeight:isToday?700:400,marginBottom:2}},day+(isToday?' — Today':'')),
-            React.createElement('div',{style:{fontSize:15,fontWeight:workout?600:400,color:workout?T.text:T.dim}},workout?workout.label:'Rest')
+        var accent=workout?(CAT[workout.category]||'#06b6d4'):'rgba(148,163,184,0.15)';
+        var isExp=expandedDay===day&&!!workout;
+        var exs=workout?(workout.exercises||[]):[];
+        var tot=exs.reduce(function(t,ex){return t+(parseInt(ex.sets)||0);},0);
+        var wrap={marginBottom:8,borderRadius:12,overflow:'hidden',
+          background:isToday?'rgba(124,58,237,0.08)':T.bg2,
+          border:'1px solid '+(isToday?'rgba(124,58,237,0.4)':T.border)};
+        var head={padding:'14px 16px',display:'flex',alignItems:'center',gap:14,
+          cursor:workout?'pointer':'default',WebkitTapHighlightColor:'transparent'};
+        return React.createElement('div',{key:day,style:wrap},
+          React.createElement('div',{
+            onClick:function(){if(workout)setExpandedDay(function(v){return v===day?null:day;});},
+            style:head},
+            React.createElement('div',{style:{width:3,borderRadius:2,alignSelf:'stretch',background:accent,flexShrink:0}}),
+            React.createElement('div',{style:{flex:1,minWidth:0}},
+              React.createElement('div',{style:{fontSize:12,marginBottom:2,
+                color:isToday?'#a78bfa':T.dim,fontWeight:isToday?700:400}},
+                day+(isToday?' \u2014 Today':'')),
+              React.createElement('div',{style:{fontSize:15,
+                fontWeight:workout?600:400,color:workout?T.text:T.dim}},
+                workout?workout.label:'Rest'),
+              workout&&React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:2,fontFamily:T.mono}},
+                exs.length+' exercises \u00b7 '+tot+' sets')
+            ),
+            workout&&React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,flexShrink:0}},
+              React.createElement('div',{style:{fontSize:11,padding:'3px 8px',borderRadius:6,
+                background:'rgba(255,255,255,0.05)',color:T.dim}},workout.tag||workout.wtype||''),
+              React.createElement('div',{style:{fontSize:10,color:T.dim}},isExp?'\u25b2':'\u25bc')
+            )
           ),
-          workout&&React.createElement('div',{style:{fontSize:11,padding:'3px 8px',borderRadius:6,background:'rgba(255,255,255,0.05)',color:T.dim}},workout.tag||workout.wtype||'')
+          isExp&&React.createElement('div',{style:{padding:'0 16px 12px 33px'}},
+            exs.map(function(ex,ei){
+              return React.createElement('div',{key:(ex.id||'')+ei,style:{display:'flex',
+                justifyContent:'space-between',alignItems:'center',gap:10,
+                padding:'7px 0',borderTop:'1px solid '+T.border}},
+                React.createElement('div',{style:{fontSize:13,color:T.sub,flex:1,minWidth:0,
+                  whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},ex.name),
+                React.createElement('div',{style:{fontSize:12,color:T.dim,fontFamily:T.mono,flexShrink:0}},
+                  ex.sets+'\u00d7'+ex.reps)
+              );
+            }),
+            workout.note&&React.createElement('div',{style:{fontSize:11,color:T.dim,marginTop:8,
+              paddingTop:8,borderTop:'1px solid '+T.border,lineHeight:1.5}},workout.note)
+          )
         );
       })
     )
   );
 }
-
 function PPLTracker(){
   const[workouts,setWorkoutsRaw]=useState(()=>loadLS('fitlog_workouts',null)||GENERIC_STARTER_WORKOUTS);
   const[workoutsLoaded,setWorkoutsLoaded]=useState(false);
@@ -3300,9 +3357,22 @@ function AppRoot(){
   const hadSessionRef=useRef(false);
 
   useEffect(()=>{
+    // getSession() can reject or hang. Without a catch and a timeout the app
+    // sits on "Loading..." forever, because session stays undefined.
+    var settled=false;
+    var timeoutId=setTimeout(function(){
+      if(!settled){settled=true;setSession(null);}
+    },8000);
+
     supabase.auth.getSession().then(({data})=>{
-      setSession(data.session);
-      if(data.session)hadSessionRef.current=true;
+      if(settled)return;
+      settled=true;clearTimeout(timeoutId);
+      setSession(data&&data.session?data.session:null);
+      if(data&&data.session)hadSessionRef.current=true;
+    }).catch(()=>{
+      if(settled)return;
+      settled=true;clearTimeout(timeoutId);
+      setSession(null);
     });
 
     const{data:listener}=supabase.auth.onAuthStateChange((event,newSession)=>{
@@ -3331,7 +3401,7 @@ function AppRoot(){
         setSession(null);
       }
     });
-    return()=>listener.subscription.unsubscribe();
+    return()=>{clearTimeout(timeoutId);listener.subscription.unsubscribe();};
   },[]);
 
   if(session===undefined){
