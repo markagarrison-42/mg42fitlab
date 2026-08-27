@@ -306,7 +306,14 @@ function getWeeklyVolume(allLogs,refDate,customBpOverride){
     var exName=null;var weekSets=0;
     entries.forEach(function(e){
       var t=new Date(e.date);
-      if(t>=start&&t<end){if(!exName)exName=e.exName||null;weekSets++;}
+      if(t<start||t>=end)return;
+      if(!exName)exName=e.exName||null;
+      // Working sets only. Warm-ups are not stimulus, and sets under 5 reps are
+      // strength work - counting a 1-rep top single as hypertrophy volume
+      // massively overstates ramp days like Power Matrix.
+      if(e.warmup)return;
+      if((e.reps||0)<MIN_WORKING_REPS)return;
+      weekSets++;
     });
     if(!weekSets)return;
     var rawName=exName||exId.replace(/_/g,' ');
@@ -321,9 +328,34 @@ function getWeeklyVolume(allLogs,refDate,customBpOverride){
 }
 
 // Weekly volume targets (sets/week) — from Anthropic PPL Hypertrophy Restructure v2
+const MIN_WORKING_REPS=5;
 const TARGET_VOLUME={Chest:[20,24],Back:[22,26],Shoulders:[20,24],Biceps:[15,19],Triceps:[15,19],Quads:[16,20],Hamstrings:[14,18],Glutes:[14,18],Calves:[15,19],Core:null,Traps:[6,10],Other:null};
 
-function WeeklyVolumeCard({allLogs,customBp,setCustomBp}){
+// Sum planned sets per muscle group for scheduled days from tomorrow through
+// today+offset. Used to project where weekly volume will land if the plan runs.
+function getPlannedVolume(workouts,schedule,customBp,offset){
+  var out={};
+  if(!offset||offset<1)return out;
+  var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var base=new Date();
+  var weekEnd=getWeekRange(base).end;
+  for(var i=1;i<=offset;i++){
+    var d=new Date();d.setDate(d.getDate()+i);
+    if(d>=weekEnd)break;
+    var dn=days[d.getDay()];
+    var it=(schedule||[]).find(function(s){return s.day===dn;});
+    if(!it||!it.workoutKey)continue;
+    var w=workouts[it.workoutKey];
+    if(!w||!w.exercises)continue;
+    w.exercises.forEach(function(ex){
+      if(!ex||!ex.id)return;
+      var bp=(customBp&&customBp[ex.id])?customBp[ex.id]:inferBodyPart(ex.name);
+      out[bp]=(out[bp]||0)+(parseInt(ex.sets)||0);
+    });
+  }
+  return out;
+}
+function WeeklyVolumeCard({allLogs,customBp,setCustomBp,workouts,schedule,projectOffset}){
   const[collapsed,setCollapsed]=useState(false);
   const[expandedBp,setExpandedBp]=useState(null);
   const[editingEx,setEditingEx]=useState(null);
@@ -333,6 +365,9 @@ function WeeklyVolumeCard({allLogs,customBp,setCustomBp}){
   // tick forces re-read of localStorage overrides after saving a body part change
   var refDate=new Date();refDate.setDate(refDate.getDate()+weekOffset*7);
   var _vd=getWeeklyVolume(allLogs,refDate,customBp);
+  var planned=(weekOffset===0&&projectOffset>0&&workouts&&schedule)
+    ? getPlannedVolume(workouts,schedule,customBp,projectOffset) : {};
+  var hasPlan=Object.keys(planned).length>0;
   var byBodyPart=_vd.byBodyPart;
   var byExercise=_vd.byExercise;
   const bodyPartOrder=['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Calves','Glutes','Traps','Core','Other'];
@@ -380,7 +415,7 @@ function WeeklyVolumeCard({allLogs,customBp,setCustomBp}){
       React.createElement('div',{style:{fontSize:16}},'\uD83D\uDCCA'),
       React.createElement('div',{style:{flex:1}},
         React.createElement('div',{style:{fontSize:13,fontWeight:700,color:T.text}},isCurrentWeek?'Weekly Volume':'Weekly Volume \u2014 '+Math.abs(weekOffset)+' week'+(Math.abs(weekOffset)>1?'s':'')+' ago'),
-        React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1}},rangeLabel)
+        React.createElement('div',{style:{fontSize:10,color:hasPlan?'#a78bfa':T.dim,marginTop:1}},hasPlan?(rangeLabel+'  \u2588 logged  \u2337 planned'):rangeLabel)
       ),
       React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6}},
         React.createElement('button',{onClick:function(e){e.stopPropagation();setWeekOffset(function(o){return o-1;});if(collapsed)setCollapsed(false);},style:{width:28,height:28,borderRadius:7,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:16,cursor:'pointer',WebkitTapHighlightColor:'transparent',lineHeight:1}},'\u2039'),
@@ -391,9 +426,12 @@ function WeeklyVolumeCard({allLogs,customBp,setCustomBp}){
     !collapsed&&React.createElement('div',{style:{padding:'0 16px 14px'}},
       entries.map(function(bp){
         var count=byBodyPart[bp]||0;
+        var plan=planned[bp]||0;
+        var proj=count+plan;
         var target=TARGET_VOLUME[bp];
-        var color=statusColor(count,target);
+        var color=statusColor(proj,target);
         var pct=target?Math.min(100,Math.round((count/target[1])*100)):0;
+        var projPct=target?Math.min(100-pct,Math.round((plan/target[1])*100)):0;
         var isExpanded=expandedBp===bp;
         var exercises=(byExercise[bp]||[]).slice().sort(function(a,b){return b.sets-a.sets;});
         return React.createElement('div',{key:bp,style:{marginBottom:8}},
@@ -405,10 +443,11 @@ function WeeklyVolumeCard({allLogs,customBp,setCustomBp}){
               React.createElement('div',{style:{fontSize:12,color:T.sub}},bp),
               exercises.length>0&&React.createElement('div',{style:{fontSize:9,color:T.dim}},isExpanded?'\u25b2':'\u25bc')
             ),
-            React.createElement('div',{style:{fontSize:12,fontFamily:T.mono,fontWeight:700,color}},count+(target?'/'+target[0]+'-'+target[1]:''))
+            React.createElement('div',{style:{fontSize:12,fontFamily:T.mono,fontWeight:700,color}},(plan>0?(count+'\u2192'+proj):String(count))+(target?'/'+target[0]+'-'+target[1]:''))
           ),
-          target&&React.createElement('div',{style:{height:4,borderRadius:2,background:'rgba(148,163,184,0.12)',overflow:'hidden',marginBottom:isExpanded&&exercises.length?6:0}},
-            React.createElement('div',{style:{height:'100%',width:pct+'%',background:color,borderRadius:2,transition:'width 0.4s ease'}})
+          target&&React.createElement('div',{style:{height:7,borderRadius:3,background:'rgba(148,163,184,0.12)',overflow:'hidden',marginBottom:isExpanded&&exercises.length?6:0,fontSize:0}},
+            React.createElement('div',{style:{height:'100%',width:pct+'%',background:color,borderRadius:2,transition:'width 0.4s ease',display:'inline-block',verticalAlign:'top'}}),
+            projPct>0&&React.createElement('div',{style:{height:'100%',width:projPct+'%',transition:'width 0.4s ease',display:'inline-block',verticalAlign:'top',border:'1px dashed '+color,borderLeft:'none',opacity:0.8,boxSizing:'border-box'}})
           ),
           isExpanded&&exercises.length>0&&React.createElement('div',{style:{background:T.bg3,borderRadius:8,padding:'4px 8px',marginBottom:2}},
             exercises.map(function(ex,i){
@@ -633,12 +672,16 @@ function parseStrongCSV(text){
     // Skip Strong's rest timer rows (weight=0, reps=0, seconds>0)
     const isRestTimerRow=weight===0&&reps===0&&secs_val>0;
     if(isRestTimerRow)continue;
+    // Strong marks warm-up sets with W (or WARM_UP) in the Set column. Keep them
+    // in history, but flag so they can be excluded from working-set volume.
+    const setRaw=iSetOrder>=0&&f[iSetOrder]!==undefined?String(f[iSetOrder]).trim().toUpperCase():'';
+    const isWarmup=setRaw==='W'||setRaw==='WARM_UP';
     const effectiveReps=reps>0?reps:0;
     if(effectiveReps>0||weight>0){
       if(!logs[exId])logs[exId]=[];
       var parsedDate=new Date(dateStr.replace(' ','T'));
       if(isNaN(parsedDate.getTime()))parsedDate=new Date(dateStr);
-      logs[exId].push({date:parsedDate.toISOString(),weight,reps:effectiveReps||1,e1rm:weight>0?e1rm(weight,effectiveReps||1):0,notes,workoutName:workoutName,exName:exerciseName});
+      logs[exId].push({date:parsedDate.toISOString(),weight,reps:effectiveReps||1,e1rm:weight>0?e1rm(weight,effectiveReps||1):0,notes,workoutName:workoutName,exName:exerciseName,warmup:isWarmup});
     }
     if(workoutName){if(!routineMap[workoutName])routineMap[workoutName]={};if(!routineMap[workoutName][exId]){routineMap[workoutName][exId]={name:exerciseName,sets:0};}const setNum=parseInt(f[iSetOrder])||1;if(setNum>routineMap[workoutName][exId].sets)routineMap[workoutName][exId].sets=setNum;}
   }
@@ -2772,7 +2815,7 @@ function DashboardTab({allLogs,workouts,schedule,restDefaults,customBp,setCustom
     React.createElement(VolumeGapCard,{allLogs,workouts,schedule,customBp,profile,onSaveProfile}),
 
     // Weekly volume
-    React.createElement(WeeklyVolumeCard,{allLogs,customBp,setCustomBp}),
+    React.createElement(WeeklyVolumeCard,{allLogs,customBp,setCustomBp,workouts,schedule,projectOffset:dayOffset}),
 
 
     // Progressive overload
