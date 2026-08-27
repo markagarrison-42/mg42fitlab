@@ -29,11 +29,14 @@ async function pushExerciseLogs(exerciseId,entries){
   }catch{}
 }
 async function fetchServerWorkouts(){
+  // Returns false on FAILURE, null on genuinely-empty. The caller must never seed
+  // defaults on false, or a transient error silently overwrites real user data.
   try{
     const{data,error}=await supabase.from('fitlog_workouts').select('data').maybeSingle();
-    if(error||!data)return null;
+    if(error)return false;
+    if(!data)return null;
     return data.data;
-  }catch{return null;}
+  }catch{return false;}
 }
 async function saveServerWorkouts(workoutsData){
   try{
@@ -45,9 +48,10 @@ async function saveServerWorkouts(workoutsData){
 async function fetchServerSchedule(){
   try{
     const{data,error}=await supabase.from('fitlog_schedule').select('data').maybeSingle();
-    if(error||!data)return null;
+    if(error)return false;
+    if(!data)return null;
     return data.data;
-  }catch{return null;}
+  }catch{return false;}
 }
 async function saveServerSchedule(scheduleData){
   try{
@@ -107,9 +111,10 @@ async function saveBodyPartOverrides(overrides){
 async function fetchServerRestDefaults(){
   try{
     const{data,error}=await supabase.from('fitlog_rest_defaults').select('data').maybeSingle();
-    if(error||!data)return null;
+    if(error)return false;
+    if(!data)return null;
     return data.data;
-  }catch{return null;}
+  }catch{return false;}
 }
 async function saveServerRestDefaults(restData){
   try{
@@ -2885,6 +2890,7 @@ function ScheduleTab({schedule,workouts,onSave}){
 function PPLTracker(){
   const[workouts,setWorkoutsRaw]=useState(()=>loadLS('fitlog_workouts',null)||GENERIC_STARTER_WORKOUTS);
   const[workoutsLoaded,setWorkoutsLoaded]=useState(false);
+  const[syncError,setSyncError]=useState(false);
   const[schedule,setScheduleRaw]=useState(()=>{const s=loadLS('fitlog_schedule',null);return Array.isArray(s)&&s.length>0?s:DEFAULT_SCHEDULE;});
   const[restDefaults,setRestDefaultsRaw]=useState(loadRestDefaults);
   const[allLogs,setAllLogs]=useState({});
@@ -2901,14 +2907,29 @@ function PPLTracker(){
   useEffect(()=>{
     fetchAllLogs().then(data=>setAllLogs(data)).catch(()=>{});
     fetchServerWorkouts().then(data=>{
+      if(data===false){
+        // Fetch FAILED. Keep whatever is cached locally and do NOT write anything
+        // back to the server - seeding defaults here would destroy real routines.
+        setSyncError(true);
+        setWorkoutsLoaded(true);
+        return;
+      }
       if(data&&Object.keys(data).length>0){
         setWorkoutsRaw(data);saveLS('fitlog_workouts',data);
       } else {
-        setWorkoutsRaw(GENERIC_STARTER_WORKOUTS);saveLS('fitlog_workouts',GENERIC_STARTER_WORKOUTS);
-        saveServerWorkouts(GENERIC_STARTER_WORKOUTS);
+        // Genuinely empty. Only seed if there is also nothing cached locally,
+        // so an empty response can never clobber an existing library.
+        var cached=loadLS('fitlog_workouts',null);
+        if(cached&&Object.keys(cached).length>0){
+          setWorkoutsRaw(cached);
+          saveServerWorkouts(cached);   // restore server from local copy
+        } else {
+          setWorkoutsRaw(GENERIC_STARTER_WORKOUTS);saveLS('fitlog_workouts',GENERIC_STARTER_WORKOUTS);
+          saveServerWorkouts(GENERIC_STARTER_WORKOUTS);
+        }
       }
       setWorkoutsLoaded(true);
-    }).catch(()=>setWorkoutsLoaded(true));
+    }).catch(()=>{setSyncError(true);setWorkoutsLoaded(true);});
 
     fetchServerSchedule().then(data=>{
       if(data&&Array.isArray(data)&&data.length>0){
@@ -2916,13 +2937,20 @@ function PPLTracker(){
         const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
         const today=days[new Date().getDay()];
         const todayItem=data.find(x=>x.day===today);
-      }else{saveServerSchedule(DEFAULT_SCHEDULE);}
-    }).catch(()=>{});
+      }else if(data!==false){
+        var cachedS=loadLS('fitlog_schedule',null);
+        if(cachedS&&Array.isArray(cachedS)&&cachedS.length>0){
+          setScheduleRaw(cachedS);saveServerSchedule(cachedS);
+        }else{
+          saveServerSchedule(DEFAULT_SCHEDULE);
+        }
+      }else{setSyncError(true);}
+    }).catch(()=>{setSyncError(true);});
 
     fetchServerRestDefaults().then(data=>{
       if(data&&Object.keys(data).length>0){
         setRestDefaultsRaw(data);saveLS('fitlog_rest_defaults',data);
-      }else{saveServerRestDefaults(restDefaults);}
+      }else if(data!==false){saveServerRestDefaults(restDefaults);}
     }).catch(()=>{});
 
     fetchProfile().then(function(data){
@@ -3095,6 +3123,11 @@ function PPLTracker(){
   );
 
   return React.createElement('div',{style:{background:T.bg,minHeight:'100vh',fontFamily:T.sans,color:T.text}},
+    syncError&&React.createElement('div',{style:{padding:'10px 16px',background:'rgba(239,68,68,0.15)',borderBottom:'1px solid rgba(239,68,68,0.4)',display:'flex',alignItems:'center',gap:10}},
+      React.createElement('div',{style:{fontSize:14}},'\u26A0\uFE0F'),
+      React.createElement('div',{style:{flex:1,fontSize:12,color:'#fca5a5',lineHeight:1.4}},'Could not reach the server. Showing your last saved copy \u2014 changes are not being synced.'),
+      React.createElement('button',{onClick:function(){window.location.reload();},style:{padding:'6px 12px',borderRadius:7,border:'1px solid rgba(239,68,68,0.4)',background:'transparent',color:'#fca5a5',fontSize:12,cursor:'pointer',flexShrink:0,WebkitTapHighlightColor:'transparent'}},'Retry')
+    ),
     // Header
     React.createElement('div',{style:{position:'sticky',top:0,zIndex:10,backdropFilter:'blur(16px)',borderBottom:'1px solid '+T.border,padding:'0 16px',background:'linear-gradient(180deg,'+T.bg+'f8 0%,'+T.bg+'e0 100%)'}},
       React.createElement('div',{style:{position:'relative',display:'flex',alignItems:'center',justifyContent:'center',paddingTop:18,paddingBottom:14}},
