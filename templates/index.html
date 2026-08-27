@@ -54,7 +54,24 @@
   <script type="text/babel" src="{{ url_for('static', filename='ppl-tracker.js') }}"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+      // One-time purge of the old cache-first worker, which could serve stale
+      // app code indefinitely and interfered with auth requests.
+      if (!localStorage.getItem('sw_reset_v3')) {
+        navigator.serviceWorker.getRegistrations().then(function(rs){
+          return Promise.all(rs.map(function(r){ return r.unregister(); }));
+        }).then(function(){
+          return caches.keys().then(function(ks){
+            return Promise.all(ks.map(function(k){ return caches.delete(k); }));
+          });
+        }).then(function(){
+          localStorage.setItem('sw_reset_v3','1');
+          location.reload();
+        }).catch(function(){
+          localStorage.setItem('sw_reset_v3','1');
+        });
+      } else {
+        navigator.serviceWorker.register('/static/sw.js').catch(function(){});
+      }
     }
   </script>
 </body>

@@ -3320,8 +3320,13 @@ function AuthScreen({onAuthed}){
         if(data.session)onAuthed();
         else setError('Check your email to confirm your account, then log in.');
       } else {
-        const{error:err}=await supabase.auth.signInWithPassword({email,password});
-        if(err)throw err;
+        // Race against a timeout - a hung request would otherwise leave the
+        // button spinning forever with no error shown.
+        const res=await Promise.race([
+          supabase.auth.signInWithPassword({email,password}),
+          new Promise(function(_,rej){setTimeout(function(){rej(new Error('Request timed out. Check your connection and try again.'));},15000);})
+        ]);
+        if(res&&res.error)throw res.error;
         onAuthed();
       }
     }catch(err){
@@ -3357,21 +3362,13 @@ function AppRoot(){
   const hadSessionRef=useRef(false);
 
   useEffect(()=>{
-    // getSession() can reject or hang. Without a catch and a timeout the app
-    // sits on "Loading..." forever, because session stays undefined.
-    var settled=false;
-    var timeoutId=setTimeout(function(){
-      if(!settled){settled=true;setSession(null);}
-    },8000);
-
+    // A catch is needed so a rejection can't leave session undefined forever,
+    // but do NOT race a timeout here - abandoning the promise while it is still
+    // running caused more trouble than the hang it was meant to solve.
     supabase.auth.getSession().then(({data})=>{
-      if(settled)return;
-      settled=true;clearTimeout(timeoutId);
       setSession(data&&data.session?data.session:null);
       if(data&&data.session)hadSessionRef.current=true;
     }).catch(()=>{
-      if(settled)return;
-      settled=true;clearTimeout(timeoutId);
       setSession(null);
     });
 
@@ -3401,7 +3398,7 @@ function AppRoot(){
         setSession(null);
       }
     });
-    return()=>{clearTimeout(timeoutId);listener.subscription.unsubscribe();};
+    return()=>listener.subscription.unsubscribe();
   },[]);
 
   if(session===undefined){
