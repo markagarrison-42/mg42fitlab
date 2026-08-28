@@ -2597,6 +2597,7 @@ function BodyweightCard({profile,onSaveProfile}){
 // ── VOLUME GAP CARD ──────────────────────────────────────────
 function VolumeGapCard({allLogs,workouts,schedule,customBp,profile,onSaveProfile}){
   const[open,setOpen]=useState(false);
+  const[sel,setSel]=useState({});
 
   var wk=getWeekRange(new Date());
   var weekKey=localDateStr(wk.start);
@@ -2611,12 +2612,31 @@ function VolumeGapCard({allLogs,workouts,schedule,customBp,profile,onSaveProfile
 
   var anyUncovered=visible.some(function(g){return !g.covered;});
 
+  // Which exercises feed the built session. Undefined means "not touched", in
+  // which case the first candidate of each group counts as selected by default.
+  function isSel(cd,idx){
+    return (sel[cd.id]===undefined)?(idx===0):!!sel[cd.id];
+  }
+  function toggleSel(cd,idx){
+    setSel(function(prev){
+      var next=Object.assign({},prev);
+      next[cd.id]=!( prev[cd.id]===undefined ? idx===0 : prev[cd.id] );
+      return next;
+    });
+  }
+  function selectedFor(g){
+    return g.candidates.filter(function(cd,i){return isSel(cd,i);});
+  }
+
   function dismiss(bp){
     var next=dismissed.concat([bp]);
     onSaveProfile(Object.assign({},profile||{},{gapDismissals:{week:weekKey,groups:next}}));
   }
 
   // Build a supplementary session from every visible gap and export as Strong template
+  var selCount=0;
+  visible.forEach(function(g){selCount+=selectedFor(g).length;});
+
   function exportGaps(){
     var rows=['"Folder","Template Name","Exercise","Set","Group","Weight (kg)","Reps","Set Duration (s)","Distance (m)","Rest Timer (s)","Exercise Notes","Template Note"'];
     var rd=loadLS('fitlog_rest_defaults',{_default:120});
@@ -2625,18 +2645,25 @@ function VolumeGapCard({allLogs,workouts,schedule,customBp,profile,onSaveProfile
     var seen={};
     var first=true;
     visible.forEach(function(g){
-      var pick=g.candidates[0];
-      if(!pick||seen[pick.id])return;
-      seen[pick.id]=true;
-      var sets=Math.max(1,Math.min(6,g.short));
-      var rest=rd[pick.id]||rd._default||120;
-      var repsStr=pick.reps||'10-12';
-      var parts=String(repsStr).split('-');
-      var repsVal=parseInt(parts[parts.length-1])||12;
-      for(var s=1;s<=sets;s++){
-        rows.push(['"Volume Top-Up"','"'+tname+'"','"'+pick.name+'"',s,'','',repsVal,'','',rest,'',
-          '"'+tnote+'"'].join(','));
-      }
+      var picks=selectedFor(g);
+      if(!picks.length)return;
+      var total=Math.max(1,Math.min(8,g.short));
+      picks.forEach(function(pick,pi){
+        if(!pick||seen[pick.id])return;
+        seen[pick.id]=true;
+        // Split the shortfall across the chosen exercises, remainder to the first
+        var base=Math.floor(total/picks.length);
+        var extra=(pi<(total%picks.length))?1:0;
+        var sets=Math.max(1,base+extra);
+        var rest=rd[pick.id]||rd._default||120;
+        var repsStr=pick.reps||'10-12';
+        var parts=String(repsStr).split('-');
+        var repsVal=parseInt(parts[parts.length-1])||12;
+        for(var s=1;s<=sets;s++){
+          rows.push(['"Volume Top-Up"','"'+tname+'"','"'+pick.name+'"',s,'','',repsVal,'','',rest,'',
+            '"'+tnote+'"'].join(','));
+        }
+      });
       first=false;
     });
     if(rows.length<2)return;
@@ -2688,8 +2715,22 @@ function VolumeGapCard({allLogs,workouts,schedule,customBp,profile,onSaveProfile
           ),
           g.candidates.length>0
             ? React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:5}},
-                g.candidates.map(function(cd){
-                  return React.createElement('div',{key:cd.id,style:{fontSize:11,padding:'4px 9px',borderRadius:6,background:T.bg3,color:T.sub,border:'1px solid '+T.border}},cd.name);
+                g.candidates.map(function(cd,ci){
+                  var on=isSel(cd,ci);
+                  return React.createElement('button',{
+                    key:cd.id,
+                    onClick:function(){toggleSel(cd,ci);},
+                    style:{fontSize:11,padding:'5px 10px',borderRadius:6,cursor:'pointer',
+                      WebkitTapHighlightColor:'transparent',
+                      display:'inline-flex',alignItems:'center',gap:5,
+                      background:on?'rgba(124,58,237,0.18)':T.bg3,
+                      color:on?'#a78bfa':T.dim,
+                      border:'1px solid '+(on?'rgba(124,58,237,0.5)':T.border),
+                      fontWeight:on?600:400}
+                  },
+                    React.createElement('span',{style:{fontSize:10}},on?'\u2713':'+'),
+                    React.createElement('span',null,cd.name)
+                  );
                 })
               )
             : React.createElement('div',{style:{fontSize:11,color:T.dim}},'No exercises in your library for this group')
@@ -2698,7 +2739,7 @@ function VolumeGapCard({allLogs,workouts,schedule,customBp,profile,onSaveProfile
       React.createElement('button',{
         onClick:exportGaps,
         style:{width:'100%',marginTop:12,padding:12,borderRadius:10,border:'none',background:GRAD.button,color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer',WebkitTapHighlightColor:'transparent'}
-      },'Build session \u2192 Export to Strong')
+      },'Build session ('+selCount+' exercises) \u2192 Export to Strong')
     )
   );
 }
