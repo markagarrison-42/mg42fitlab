@@ -1927,11 +1927,40 @@ function getProgressiveOverload(allLogs, workouts){
     const lastMax = maxWeight(lastWeek);
 
     // Next weight recommendation
-    // Find last logged set with weight to determine working weight
-    const allReal=[...realEntries].sort((a,b)=>new Date(b.date)-new Date(a.date));
-    const lastSet=allReal[0];
-    const lastWeight=lastSet?lastSet.weight:0;
-    const lastReps=lastSet?lastSet.reps:0;
+    // Base the recommendation on the heaviest WORKING set of the most recent
+    // session. Strong gives every set in a workout the same timestamp, so a plain
+    // date sort leaves ties in arbitrary order and can pick a warm-up.
+    // Find the most recent session for this lift.
+    const nonWarm=realEntries.filter(function(e){return !e.warmup;});
+    const pool=nonWarm.length?nonWarm:realEntries;
+    let lastWeight=0,lastReps=0,isRamp=false;
+    if(pool.length){
+      let newest=0;
+      pool.forEach(function(e){
+        const t=new Date(e.date).getTime();
+        if(t>newest)newest=t;
+      });
+      const lastSession=pool.filter(function(e){
+        return new Date(e.date).getTime()===newest;
+      });
+      // A ramp day works up to heavy low-rep sets (Power Matrix style). Those
+      // singles ARE the point of the session, so progress against the top set
+      // rather than the lighter back-off work.
+      isRamp=lastSession.some(function(e){return (e.reps||0)>0&&(e.reps||0)<=3;})
+             &&lastSession.length>=4;
+      const basis=isRamp
+        ? lastSession
+        : (function(){
+            const w=lastSession.filter(function(e){return (e.reps||0)>=MIN_WORKING_REPS;});
+            return w.length?w:lastSession;
+          })();
+      let top=basis[0];
+      basis.forEach(function(e){
+        if((e.weight||0)>(top.weight||0))top=e;
+      });
+      lastWeight=top.weight||0;
+      lastReps=top.reps||0;
+    }
 
     // Standard increment: 5lb upper body, 10lb lower body
     const exName=(exercises[exId]||exId).toLowerCase();
@@ -1974,7 +2003,7 @@ function getProgressiveOverload(allLogs, workouts){
       volDelta: thisVol-lastVol,
       maxDelta: thisMax-lastMax,
       hasData: thisWeek.length>0||lastWeek.length>0,
-      lastWeight,lastReps,nextWeight,nextNote,
+      lastWeight,lastReps,nextWeight,nextNote,isRamp,
     };
   });
   return results;
@@ -2030,7 +2059,7 @@ function OverloadCard({allLogs,workouts}){
             )
           ),
           e.nextWeight!==null&&e.nextWeight!==undefined&&React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 10px',background:'rgba(124,58,237,0.08)',borderRadius:7,marginLeft:26}},
-            React.createElement('div',{style:{fontSize:11,color:T.dim}},e.nextNote||'Next session'),
+            React.createElement('div',{style:{fontSize:11,color:T.dim}},(e.nextNote||'Next session')+(e.isRamp?' \u00b7 top set '+e.lastWeight+'\u00d7'+e.lastReps:'')),
             React.createElement('div',{style:{fontSize:13,fontWeight:700,color:'#a78bfa',fontFamily:T.mono}},e.nextWeight+'lb')
           )
         );
