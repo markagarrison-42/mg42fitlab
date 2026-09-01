@@ -1946,12 +1946,8 @@ function getProgressiveOverload(allLogs, workouts){
       // A ramp day works up to heavy low-rep sets (Power Matrix style). Those
       // singles ARE the point of the session, so progress against the top set
       // rather than the lighter back-off work.
-      // Two or more sets at 1-3 reps means you deliberately worked up heavy.
-      // One stray heavy triple in an otherwise normal session does not count.
-      var lowRep=lastSession.filter(function(e){
-        return (e.reps||0)>0&&(e.reps||0)<=3;
-      }).length;
-      isRamp=lowRep>=2;
+      isRamp=lastSession.some(function(e){return (e.reps||0)>0&&(e.reps||0)<=3;})
+             &&lastSession.length>=4;
       const basis=isRamp
         ? lastSession
         : (function(){
