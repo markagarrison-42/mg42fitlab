@@ -2072,7 +2072,7 @@ function OverloadCard({allLogs,workouts,schedule}){
     ),
     expanded&&React.createElement('div',{style:{padding:'0 16px 14px'}},
       React.createElement('div',{style:{display:'flex',gap:6,marginBottom:12}},
-        ['all','up','down','new'].map(f=>React.createElement('button',{key:f,onClick:()=>setFilter(f),style:{flex:1,padding:'5px 4px',borderRadius:7,border:'1px solid '+(filter===f?'rgba(124,58,237,0.5)':'transparent'),background:filter===f?'rgba(124,58,237,0.2)':'rgba(255,255,255,0.04)',color:filter===f?'#a78bfa':T.dim,fontSize:11,fontWeight:filter===f?700:400,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},f==='all'?'Active':f==='up'?'\u2191 PR':f==='down'?'\u2193 Drop':'New'))
+        ['all','upcoming','up','down','new'].map(f=>React.createElement('button',{key:f,onClick:()=>setFilter(f),style:{flex:1,padding:'5px 4px',borderRadius:7,border:'1px solid '+(filter===f?'rgba(124,58,237,0.5)':'transparent'),background:filter===f?'rgba(124,58,237,0.2)':'rgba(255,255,255,0.04)',color:filter===f?'#a78bfa':T.dim,fontSize:11,fontWeight:filter===f?700:400,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},f==='all'?'Active':f==='upcoming'?'Upcoming':f==='up'?'\u2191 PR':f==='down'?'\u2193 Drop':'New'))
       ),
       filtered.length===0&&React.createElement('div',{style:{fontSize:13,color:T.dim,textAlign:'center',padding:'12px 0'}},'No data for this filter yet'),
       filtered.slice(0,20).map(e=>{
@@ -2090,7 +2090,7 @@ function OverloadCard({allLogs,workouts,schedule}){
             ),
             React.createElement('div',{style:{textAlign:'right',flexShrink:0}},
               e.thisWeek.max>0&&React.createElement('div',{style:{fontSize:13,fontWeight:700,color,fontFamily:T.mono}},
-                (up&&e.e1rmDelta>0?'+':'')+e.e1rmDelta+' e1RM'
+                e.lastWeek.sets>0?((up&&e.e1rmDelta>0?'+':'')+e.e1rmDelta+' e1RM'):'\u2014'
               ),
               React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1}},e.thisWeek.sets+' sets')
             )
