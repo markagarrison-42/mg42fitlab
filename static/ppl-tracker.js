@@ -24,9 +24,20 @@ async function fetchAllLogs(){
 async function pushExerciseLogs(exerciseId,entries){
   try{
     const{data:{user}}=await supabase.auth.getUser();
-    if(!user)return;
-    await supabase.from('fitlog_logs').upsert({user_id:user.id,exercise_id:exerciseId,data:entries,updated_at:new Date().toISOString()},{onConflict:'user_id,exercise_id'});
-  }catch{}
+    if(!user)return false;
+    const{error}=await supabase.from('fitlog_logs').upsert({user_id:user.id,exercise_id:exerciseId,data:entries,updated_at:new Date().toISOString()},{onConflict:'user_id,exercise_id'});
+    if(error){
+      // A silently swallowed error here meant edits and deletes could appear to
+      // work locally while never reaching the server. Surface it so a failed
+      // save is never mistaken for a successful one.
+      alert('Save failed: '+error.message);
+      return false;
+    }
+    return true;
+  }catch(err){
+    alert('Save failed: '+(err&&err.message?err.message:'unknown error'));
+    return false;
+  }
 }
 async function fetchServerWorkouts(){
   // Returns false on FAILURE, null on genuinely-empty. The caller must never seed
@@ -764,7 +775,14 @@ function SessionEditor({session,workouts,onUpdateLog,onDeleteSet,onAddExercise,o
   const isCustom=selExId==='__custom__';
   const exGroups={};session.sets.forEach(s=>{if(!exGroups[s.exId])exGroups[s.exId]={name:s.exName,sets:[]};exGroups[s.exId].sets.push(s);});
   function startEdit(key,w,r){setEditKey(key);setEditW(String(w));setEditR(String(r));}
-  function saveEdit(exId,s){const w=parseFloat(editW),r=parseInt(editR);if(w&&r)onUpdateLog(exId,s,{weight:w,reps:r,e1rm:e1rm(w,r)});setEditKey(null);}
+  function saveEdit(exId,s){
+    const w=parseFloat(editW),r=parseInt(editR);
+    if(!w||!r){
+      return;
+    }
+    onUpdateLog(exId,s,{weight:w,reps:r,e1rm:e1rm(w,r)});
+    setEditKey(null);
+  }
   function saveNewExercise(){
     if(!selExId)return;
     const exName=isCustom?(customExName.trim()||'Custom Exercise'):exLib[selExId]||selExId.replace(/_/g,' ');
@@ -2000,6 +2018,7 @@ function getProgressiveOverload(allLogs, workouts){
     }
 
     results[exId] = {
+      exId: exId,
       name: exercises[exId]||exId.replace(/_/g,' '),
       thisWeek:{e1rm:thisE1rm,vol:thisVol,max:thisMax,sets:thisWeek.length},
       lastWeek:{e1rm:lastE1rm,vol:lastVol,max:lastMax,sets:lastWeek.length},
@@ -2013,13 +2032,27 @@ function getProgressiveOverload(allLogs, workouts){
   return results;
 }
 
-function OverloadCard({allLogs,workouts}){
+function OverloadCard({allLogs,workouts,schedule}){
   const[expanded,setExpanded]=useState(false);
   const[filter,setFilter]=useState('all'); // all | up | down | new
   const overload=getProgressiveOverload(allLogs,workouts);
   const entries=Object.values(overload).filter(e=>e.hasData);
 
+  var upcomingIds={};
+  if(schedule&&workouts){
+    var dnames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    var ti=new Date().getDay();
+    for(var di=ti;di<7;di++){
+      var sit=schedule.find(function(s){return s.day===dnames[di];});
+      if(!sit||!sit.workoutKey)continue;
+      var sw=workouts[sit.workoutKey];
+      if(!sw||!sw.exercises)continue;
+      sw.exercises.forEach(function(ex){if(ex&&ex.id)upcomingIds[ex.id]=true;});
+    }
+  }
+
   const filtered=entries.filter(e=>{
+    if(filter==='upcoming') return upcomingIds[e.exId]&&e.thisWeek.sets===0;
     if(filter==='up') return e.e1rmDelta>0||e.volDelta>0;
     if(filter==='down') return e.lastWeek.sets>0&&e.thisWeek.sets>0&&e.e1rmDelta<0&&e.volDelta<0;
     if(filter==='new') return e.thisWeek.sets>0&&e.lastWeek.sets===0;
@@ -2893,7 +2926,7 @@ function DashboardTab({allLogs,workouts,schedule,restDefaults,customBp,setCustom
 
 
     // Progressive overload
-    React.createElement(OverloadCard,{allLogs,workouts}),
+    React.createElement(OverloadCard,{allLogs,workouts,schedule}),
 
     // PRs this week
     recentPRs.length>0&&React.createElement('div',{style:{margin:'0 16px 12px',background:T.bg2,borderRadius:14,border:'1px solid '+T.border,padding:'12px 16px'}},
@@ -3173,10 +3206,33 @@ function PPLTracker(){
     arr[logIdx]={...arr[logIdx],...updates};logs[exId]=arr;
     setAllLogs(logs);pushExerciseLogs(exId,arr);
   }
-  function handleDeleteSet(exId,logIdx){
-    const logs={...allLogs};const arr=[...(logs[exId]||[])];
-    arr.splice(logIdx,1);logs[exId]=arr;
-    setAllLogs(logs);pushExerciseLogs(exId,arr);
+  function handleDeleteSet(exId,entryOrIdx){
+    const logs={...allLogs};
+    const arr=[...(logs[exId]||[])];
+    let nextArr;
+    if(typeof entryOrIdx==='number'){
+      nextArr=arr.filter(function(_,i){return i!==entryOrIdx;});
+    } else {
+      // Callers pass the actual entry object (from SessionEditor), not a
+      // positional index. Match by reference first, falling back to a
+      // date+weight+reps fingerprint if the object was copied along the way.
+      const target=entryOrIdx;
+      let removed=false;
+      nextArr=arr.filter(function(e){
+        if(removed)return true;
+        const same=(e===target)||
+          (e.date===target.date&&e.weight===target.weight&&e.reps===target.reps);
+        if(same){removed=true;return false;}
+        return true;
+      });
+      if(!removed){
+        alert('Could not find that set to delete - nothing was removed.');
+        return;
+      }
+    }
+    logs[exId]=nextArr;
+    setAllLogs(logs);
+    pushExerciseLogs(exId,nextArr);
   }
   function handleDeleteSession(sessionId){
     const newLogs={};
@@ -3210,10 +3266,24 @@ function PPLTracker(){
     const{parsed}=pendingImport;
     if(importLogs){
       const mergedLogs={...allLogs};
+      // Dedup by date + set-position-within-that-date, NOT weight/reps. Matching
+      // on weight/reps meant a corrected set (edited weight) no longer matched
+      // its own original entry on re-import, so the stale pre-edit value got
+      // silently re-inserted alongside the correction every time.
+      function withSetIndex(arr){
+        const counts={};
+        return arr.map(function(e){
+          const d=e.date||'';
+          counts[d]=(counts[d]||0)+1;
+          return{entry:e,key:d+'_#'+counts[d]};
+        });
+      }
       Object.entries(parsed.logs).forEach(([exId,entries])=>{
         const existing=mergedLogs[exId]||[];
-        const existingKeys=new Set(existing.map(e=>e.date+'_'+e.weight+'_'+e.reps));
-        const newEntries=entries.filter(e=>!existingKeys.has(e.date+'_'+e.weight+'_'+e.reps));
+        const existingIndexed=withSetIndex(existing);
+        const existingKeys=new Set(existingIndexed.map(x=>x.key));
+        const newIndexed=withSetIndex(entries);
+        const newEntries=newIndexed.filter(x=>!existingKeys.has(x.key)).map(x=>x.entry);
         mergedLogs[exId]=[...existing,...newEntries].sort((a,b)=>new Date(a.date)-new Date(b.date));
       });
       setAllLogs(mergedLogs);
