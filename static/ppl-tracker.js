@@ -1089,9 +1089,34 @@ function RoutineEditor({workout,workoutKey,workouts,allLogs,onSave,onClose}){
         Object.keys(TYPE_LABELS).map(cat=>React.createElement('button',{key:cat,onClick:()=>setDraft(d=>({...d,category:cat})),style:{padding:'8px 10px',borderRadius:8,border:'1px solid '+(draft.category===cat?(CAT[cat]||T.border2):T.border2),background:draft.category===cat?(CAT[cat]||'#7c3aed')+'20':'rgba(255,255,255,0.03)',color:draft.category===cat?(CAT[cat]||'#a78bfa'):T.muted,fontSize:12,fontWeight:draft.category===cat?700:400,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},TYPE_LABELS[cat]))
       ),
       React.createElement('label',{style:{fontSize:12,color:T.sub,fontWeight:600,display:'block',marginBottom:6}},'Folder'),
-      React.createElement('select',{value:draft.gym||'general',onChange:e=>setDraft(d=>({...d,gym:e.target.value})),style:{width:'100%',padding:'11px 12px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:8,color:T.text,fontSize:14,fontFamily:T.sans,marginBottom:12}},
-        Object.keys(GYM_LABELS).map(g=>React.createElement('option',{key:g,value:g},GYM_LABELS[g]))
-      ),
+      (function(){
+        // Build the folder list from what actually exists in THIS person's own
+        // routines, not a shared hardcoded list — GYM_LABELS was fixed to one
+        // person's gyms and never showed another user's real folders.
+        var seen={};
+        Object.values(workouts).forEach(function(w){
+          var g=w&&w.gym;
+          if(g&&!seen[g]){seen[g]=GYM_LABELS[g]||g.replace(/_/g,' ').replace(/\b\w/g,function(l){return l.toUpperCase();});}
+        });
+        if(draft.gym&&!seen[draft.gym]){
+          seen[draft.gym]=GYM_LABELS[draft.gym]||draft.gym.replace(/_/g,' ').replace(/\b\w/g,function(l){return l.toUpperCase();});
+        }
+        var folderKeys=Object.keys(seen).sort();
+        return React.createElement('div',{style:{marginBottom:12}},
+          React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:6,marginBottom:8}},
+            folderKeys.map(function(g){
+              var on=draft.gym===g;
+              return React.createElement('button',{key:g,onClick:function(){setDraft(function(d){return{...d,gym:g};});},style:{padding:'7px 11px',borderRadius:8,border:'1px solid '+(on?'rgba(124,58,237,0.5)':T.border2),background:on?'rgba(124,58,237,0.2)':'rgba(255,255,255,0.03)',color:on?'#a78bfa':T.muted,fontSize:12,fontWeight:on?700:400,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},seen[g]);
+            })
+          ),
+          React.createElement('input',{type:'text',placeholder:'Or type a new folder name',value:draft._newFolder||'',onChange:function(e){setDraft(function(d){return{...d,_newFolder:e.target.value};});},onBlur:function(){
+              if(draft._newFolder&&draft._newFolder.trim()){
+                var slug=draft._newFolder.trim().toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+                setDraft(function(d){var next={...d,gym:slug};delete next._newFolder;return next;});
+              }
+            },style:{width:'100%',padding:'10px 12px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:8,color:T.text,fontSize:13,fontFamily:T.sans}})
+        );
+      })(),
       // Exercises
       React.createElement('div',{style:{fontSize:14,fontWeight:700,color:T.text,marginBottom:10}},
         'Exercises ('+draft.exercises.length+')'
@@ -1495,8 +1520,18 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
           reordering?React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:6}},
             list.map((w,idx)=>{
               const tc=TYPE_COLORS[w.wtype]||CAT[w.category]||'#64748b';
-              return React.createElement('div',{key:w.key,'data-reorder-gym':gym,draggable:true,onDragStart:()=>handleDragStart(gym,idx),onDragOver:(e)=>handleDragOver(e,gym,idx),onDragEnd:handleDragEnd,onTouchStart:(e)=>handleTouchStart(e,gym,idx),onTouchMove:(e)=>handleTouchMove(e,gym,w.key),onTouchEnd:handleTouchEnd,style:{background:T.bg2,borderRadius:10,border:'1px solid '+T.border,padding:'12px 14px',display:'flex',alignItems:'center',gap:10,cursor:'grab',userSelect:'none'}},
-                React.createElement('div',{style:{fontSize:18,color:T.dim,flexShrink:0}},'☰'),
+              function moveRoutine(dir){
+                const keys=list.map(x=>x.key);
+                const j=idx+dir;
+                if(j<0||j>=keys.length)return;
+                [keys[idx],keys[j]]=[keys[j],keys[idx]];
+                setRoutineOrder(prev=>{const next={...prev,[gym]:keys};saveLS('fitlog_routine_order',next);return next;});
+              }
+              return React.createElement('div',{key:w.key,style:{background:T.bg2,borderRadius:10,border:'1px solid '+T.border,padding:'10px 14px',display:'flex',alignItems:'center',gap:10}},
+                React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:3,flexShrink:0}},
+                  React.createElement('button',{onClick:()=>moveRoutine(-1),disabled:idx===0,style:{width:30,height:24,borderRadius:5,border:'none',background:'rgba(148,163,184,0.1)',color:T.muted,fontSize:13,cursor:'pointer',lineHeight:1,opacity:idx===0?0.3:1,WebkitTapHighlightColor:'transparent'}},'\u2191'),
+                  React.createElement('button',{onClick:()=>moveRoutine(1),disabled:idx===list.length-1,style:{width:30,height:24,borderRadius:5,border:'none',background:'rgba(148,163,184,0.1)',color:T.muted,fontSize:13,cursor:'pointer',lineHeight:1,opacity:idx===list.length-1?0.3:1,WebkitTapHighlightColor:'transparent'}},'\u2193')
+                ),
                 React.createElement('div',{style:{width:3,borderRadius:2,alignSelf:'stretch',background:tc,flexShrink:0}}),
                 React.createElement('div',{style:{flex:1,minWidth:0}},React.createElement('div',{style:{fontSize:14,fontWeight:600,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},w.label)),
               );
