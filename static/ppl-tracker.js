@@ -1183,7 +1183,8 @@ function getLastUsed(routine,allLogs){
   return maxDate;
 }
 
-function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,allLogs}){
+function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onUnarchive,onPermanentDelete,onSaveRoutine,allLogs}){
+  const[showArchived,setShowArchived]=useState(false);
   const[search,setSearch]=useState('');
   const[editingRoutine,setEditingRoutine]=useState(null);
   const[strongFormat,setStrongFormat]=useState(null);
@@ -1481,9 +1482,33 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onSaveRoutine,
 
   const actionSheetRoutine=actionSheet?workouts[actionSheet]:null;
 
+  if(showArchived){
+    const archivedList=Object.entries(workouts).filter(([k,w])=>w.archived).sort((a,b)=>(a[1].label||'').localeCompare(b[1].label||''));
+    return React.createElement('div',{style:{paddingBottom:80}},
+      React.createElement('div',{style:{padding:'16px 16px 12px',position:'sticky',top:0,zIndex:5,background:T.bg,borderBottom:'1px solid '+T.border,display:'flex',alignItems:'center',gap:12}},
+        React.createElement('button',{onClick:()=>setShowArchived(false),style:{width:36,height:36,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:18,cursor:'pointer',flexShrink:0,WebkitTapHighlightColor:'transparent'}},'\u2039'),
+        React.createElement('div',{style:{fontSize:20,fontWeight:800,color:T.text}},'Archived ('+archivedList.length+')')
+      ),
+      React.createElement('div',{style:{padding:'12px 16px'}},
+        archivedList.length===0&&React.createElement('div',{style:{fontSize:13,color:T.dim,textAlign:'center',padding:'30px 0'}},'No archived routines'),
+        archivedList.map(([key,w])=>React.createElement('div',{key,style:{background:T.bg2,borderRadius:10,border:'1px solid '+T.border,padding:'12px 14px',marginBottom:8}},
+          React.createElement('div',{style:{fontSize:14,fontWeight:600,color:T.text,marginBottom:2}},w.label),
+          React.createElement('div',{style:{fontSize:11,color:T.dim,marginBottom:10}},(w.exercises||[]).length+' exercises'),
+          React.createElement('div',{style:{display:'flex',gap:8}},
+            React.createElement('button',{onClick:()=>onUnarchive(key),style:{flex:1,padding:9,borderRadius:8,border:'1px solid rgba(52,211,153,0.4)',background:'rgba(52,211,153,0.1)',color:'#34d399',fontSize:12,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'Restore'),
+            React.createElement('button',{onClick:()=>{if(window.confirm('Permanently delete "'+w.label+'"? This cannot be undone.'))onPermanentDelete(key);},style:{flex:1,padding:9,borderRadius:8,border:'1px solid rgba(239,68,68,0.4)',background:'rgba(239,68,68,0.1)',color:'#f87171',fontSize:12,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'Delete Permanently')
+          )
+        ))
+      )
+    );
+  }
+
   return React.createElement('div',{style:{paddingBottom:80}},
     React.createElement('div',{style:{padding:'16px 16px 8px',position:'sticky',top:0,zIndex:5,background:T.bg,borderBottom:'1px solid '+T.border}},
-      React.createElement('div',{style:{fontSize:22,fontWeight:800,color:T.text,letterSpacing:'-0.02em',marginBottom:10}},'Routines'),
+      React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}},
+        React.createElement('div',{style:{fontSize:22,fontWeight:800,color:T.text,letterSpacing:'-0.02em'}},'Routines'),
+        React.createElement('button',{onClick:()=>setShowArchived(true),style:{fontSize:12,color:T.dim,background:'transparent',border:'1px solid '+T.border2,borderRadius:8,padding:'6px 10px',cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'Archived')
+      ),
       !reordering&&!archiving&&React.createElement('button',{onClick:function(){setGenerating(true);},style:{width:'100%',padding:'11px 16px',borderRadius:10,border:'none',background:GRAD.button,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',WebkitTapHighlightColor:'transparent',marginBottom:8,display:'flex',alignItems:'center',justifyContent:'center',gap:8}},
         React.createElement('span',null,'✨'),
         React.createElement('span',null,'Generate Routine with AI')
@@ -3343,7 +3368,7 @@ function PPLTracker(){
     pendingRoutineImport.preview.forEach(r=>{
       if(r.existingKey){
         if(PROTECTED_KEYS.has(r.existingKey))return;
-        updated[r.existingKey]={...updated[r.existingKey],note:r.note||updated[r.existingKey].note,exercises:r.exercises};
+        updated[r.existingKey]={...updated[r.existingKey],note:r.note||updated[r.existingKey].note,exercises:r.exercises,archived:false};
         updatedCount++;
       }else{
         const key='custom_'+r.label.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')+'_'+Date.now();
@@ -3438,6 +3463,12 @@ function PPLTracker(){
       onSaveRoutine:(key,draft)=>{setWorkouts({...workouts,[key]:draft});},
       onReorder:handleReorder,
       onArchive:handleArchive,
+      onUnarchive:handleUnarchive,
+      onPermanentDelete:(key)=>{
+        const next={...workouts};
+        delete next[key];
+        setWorkouts(next);
+      },
     }),
 
     tab==='exercises'&&React.createElement(ExerciseDatabase,{
