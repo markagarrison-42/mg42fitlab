@@ -1084,8 +1084,13 @@ function RoutineEditor({workout,workoutKey,workouts,allLogs,onSave,onClose}){
       React.createElement('input',{type:'text',value:draft.note||'',onChange:e=>setDraft(d=>({...d,note:e.target.value})),style:{width:'100%',padding:'11px 12px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:8,color:T.text,fontSize:14,fontFamily:T.mono,marginBottom:16,minHeight:46}}),
       // Category
       React.createElement('label',{style:{fontSize:12,color:T.sub,fontWeight:600,display:'block',marginBottom:6}},'Category'),
-      React.createElement('div',{style:{display:'flex',gap:8,marginBottom:20}},
-        ['push','pull','legs','pf'].map(cat=>React.createElement('button',{key:cat,onClick:()=>setDraft(d=>({...d,category:cat})),style:{flex:1,padding:'8px 4px',borderRadius:8,border:'1px solid '+(draft.category===cat?(CAT[cat]||T.border2):T.border2),background:draft.category===cat?(CAT[cat]||'#7c3aed')+'20':'rgba(255,255,255,0.03)',color:draft.category===cat?(CAT[cat]||'#a78bfa'):T.muted,fontSize:12,fontWeight:draft.category===cat?700:400,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},cat.charAt(0).toUpperCase()+cat.slice(1)))
+      React.createElement('label',{style:{fontSize:12,color:T.sub,fontWeight:600,display:'block',marginBottom:6}},'Category'),
+      React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:6,marginBottom:12}},
+        Object.keys(TYPE_LABELS).map(cat=>React.createElement('button',{key:cat,onClick:()=>setDraft(d=>({...d,category:cat})),style:{padding:'8px 10px',borderRadius:8,border:'1px solid '+(draft.category===cat?(CAT[cat]||T.border2):T.border2),background:draft.category===cat?(CAT[cat]||'#7c3aed')+'20':'rgba(255,255,255,0.03)',color:draft.category===cat?(CAT[cat]||'#a78bfa'):T.muted,fontSize:12,fontWeight:draft.category===cat?700:400,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},TYPE_LABELS[cat]))
+      ),
+      React.createElement('label',{style:{fontSize:12,color:T.sub,fontWeight:600,display:'block',marginBottom:6}},'Folder'),
+      React.createElement('select',{value:draft.gym||'general',onChange:e=>setDraft(d=>({...d,gym:e.target.value})),style:{width:'100%',padding:'11px 12px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:8,color:T.text,fontSize:14,fontFamily:T.sans,marginBottom:12}},
+        Object.keys(GYM_LABELS).map(g=>React.createElement('option',{key:g,value:g},GYM_LABELS[g]))
       ),
       // Exercises
       React.createElement('div',{style:{fontSize:14,fontWeight:700,color:T.text,marginBottom:10}},
