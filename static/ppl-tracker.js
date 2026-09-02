@@ -425,12 +425,12 @@ function WeeklyVolumeCard({allLogs,customBp,setCustomBp,workouts,schedule,projec
     React.createElement('div',{onClick:function(){setCollapsed(function(v){return !v;});},style:{padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},
       React.createElement('div',{style:{fontSize:16}},'\uD83D\uDCCA'),
       React.createElement('div',{style:{flex:1}},
-        React.createElement('div',{style:{fontSize:13,fontWeight:700,color:T.text}},isCurrentWeek?'Weekly Volume':'Weekly Volume \u2014 '+Math.abs(weekOffset)+' week'+(Math.abs(weekOffset)>1?'s':'')+' ago'),
-        React.createElement('div',{style:{fontSize:10,color:hasPlan?'#a78bfa':T.dim,marginTop:1}},hasPlan?(rangeLabel+'  \u2588 logged  \u2337 planned'):rangeLabel)
+        React.createElement('div',{style:{fontSize:16,fontWeight:700,color:T.text}},isCurrentWeek?'Weekly Volume':'Weekly Volume \u2014 '+Math.abs(weekOffset)+' week'+(Math.abs(weekOffset)>1?'s':'')+' ago'),
+        React.createElement('div',{style:{fontSize:12,color:hasPlan?'#a78bfa':T.dim,marginTop:2}},hasPlan?(rangeLabel+'  \u2588 logged  \u2337 planned'):rangeLabel)
       ),
       React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6}},
-        React.createElement('button',{onClick:function(e){e.stopPropagation();setWeekOffset(function(o){return o-1;});if(collapsed)setCollapsed(false);},style:{width:28,height:28,borderRadius:7,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:16,cursor:'pointer',WebkitTapHighlightColor:'transparent',lineHeight:1}},'\u2039'),
-        !isCurrentWeek&&React.createElement('button',{onClick:function(e){e.stopPropagation();setWeekOffset(function(o){return Math.min(o+1,0);});},style:{width:28,height:28,borderRadius:7,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:16,cursor:'pointer',WebkitTapHighlightColor:'transparent',lineHeight:1}},'\u203a'),
+        React.createElement('button',{onClick:function(e){e.stopPropagation();setWeekOffset(function(o){return o-1;});if(collapsed)setCollapsed(false);},style:{width:40,height:40,borderRadius:7,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:16,cursor:'pointer',WebkitTapHighlightColor:'transparent',lineHeight:1}},'\u2039'),
+        !isCurrentWeek&&React.createElement('button',{onClick:function(e){e.stopPropagation();setWeekOffset(function(o){return Math.min(o+1,0);});},style:{width:40,height:40,borderRadius:7,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:16,cursor:'pointer',WebkitTapHighlightColor:'transparent',lineHeight:1}},'\u203a'),
         React.createElement('div',{style:{fontSize:13,color:T.dim,marginLeft:2}},collapsed?'\u2304':'\u2303')
       )
     ),
@@ -451,10 +451,10 @@ function WeeklyVolumeCard({allLogs,customBp,setCustomBp,workouts,schedule,projec
             style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3,cursor:exercises.length?'pointer':'default',WebkitTapHighlightColor:'transparent'}
           },
             React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6}},
-              React.createElement('div',{style:{fontSize:12,color:T.sub}},bp),
-              exercises.length>0&&React.createElement('div',{style:{fontSize:9,color:T.dim}},isExpanded?'\u25b2':'\u25bc')
+              React.createElement('div',{style:{fontSize:14,fontWeight:600,color:T.text}},bp),
+              exercises.length>0&&React.createElement('div',{style:{fontSize:10,color:T.dim}},isExpanded?'\u25b2':'\u25bc')
             ),
-            React.createElement('div',{style:{fontSize:12,fontFamily:T.mono,fontWeight:700,color}},(plan>0?(count+'\u2192'+proj):String(count))+(target?'/'+target[0]+'-'+target[1]:''))
+            React.createElement('div',{style:{fontSize:13,fontFamily:T.mono,fontWeight:700,color}},(plan>0?(count+'\u2192'+proj):String(count))+(target?'/'+target[0]+'-'+target[1]:''))
           ),
           target&&React.createElement('div',{style:{height:7,borderRadius:3,background:'rgba(148,163,184,0.12)',overflow:'hidden',marginBottom:isExpanded&&exercises.length?6:0,fontSize:0}},
             React.createElement('div',{style:{height:'100%',width:pct+'%',background:color,borderRadius:2,transition:'width 0.4s ease',display:'inline-block',verticalAlign:'top'}}),
@@ -968,8 +968,8 @@ function HistoryView({allLogs,workouts,onUpdateLog,onDeleteSet,onDeleteSession,o
                   React.createElement('div',{style:{fontSize:12,color:T.muted}},dateStr)
                 ),
                 React.createElement('div',{style:{display:'flex',gap:6,alignItems:'center'}},
-                  React.createElement('button',{onClick:e=>{e.stopPropagation();setEditingSession(si);},style:{padding:'5px 10px',borderRadius:7,border:'1px solid '+T.border2,background:'rgba(124,58,237,0.1)',color:'#a78bfa',fontSize:11,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'Edit'),
-                  React.createElement('button',{onClick:e=>{e.stopPropagation();setSavingAsRoutine(session);setRoutineName(session.workoutLabel);},style:{padding:'5px 10px',borderRadius:7,border:'1px solid rgba(20,184,166,0.3)',background:'rgba(20,184,166,0.08)',color:'#5eead4',fontSize:11,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'+Routine'),
+                  React.createElement('button',{onClick:e=>{e.stopPropagation();setEditingSession(si);},style:{padding:'9px 12px',borderRadius:8,border:'1px solid '+T.border2,background:'rgba(124,58,237,0.1)',color:'#a78bfa',fontSize:12,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent',minHeight:44,display:'flex',alignItems:'center'}},'Edit'),
+                  React.createElement('button',{onClick:e=>{e.stopPropagation();setSavingAsRoutine(session);setRoutineName(session.workoutLabel);},style:{padding:'9px 12px',borderRadius:8,border:'1px solid rgba(20,184,166,0.3)',background:'rgba(20,184,166,0.08)',color:'#5eead4',fontSize:12,fontWeight:600,cursor:'pointer',WebkitTapHighlightColor:'transparent',minHeight:44,display:'flex',alignItems:'center'}},'+Routine'),
                   React.createElement('button',{onClick:e=>{e.stopPropagation();onDeleteSession(session);},style:{padding:'5px 8px',borderRadius:7,border:'none',background:'rgba(239,68,68,0.1)',color:'#f87171',fontSize:11,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'Del')
                 )
               ),
@@ -1123,8 +1123,8 @@ function RoutineEditor({workout,workoutKey,workouts,allLogs,onSave,onClose}){
       ),
       draft.exercises.map((ex,i)=>React.createElement('div',{key:i,style:{display:'flex',gap:8,alignItems:'center',marginBottom:8,padding:'10px 12px',background:T.bg2,borderRadius:10,border:'1px solid '+T.border}},
         React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:4,flexShrink:0}},
-          React.createElement('button',{onClick:()=>moveEx(i,-1),disabled:i===0,style:{width:28,height:22,borderRadius:4,border:'none',background:'rgba(148,163,184,0.1)',color:T.muted,fontSize:12,cursor:'pointer',lineHeight:1,opacity:i===0?0.3:1}},'↑'),
-          React.createElement('button',{onClick:()=>moveEx(i,1),disabled:i===draft.exercises.length-1,style:{width:28,height:22,borderRadius:4,border:'none',background:'rgba(148,163,184,0.1)',color:T.muted,fontSize:12,cursor:'pointer',lineHeight:1,opacity:i===draft.exercises.length-1?0.3:1}},'↓')
+          React.createElement('button',{onClick:()=>moveEx(i,-1),disabled:i===0,style:{width:40,height:34,borderRadius:4,border:'none',background:'rgba(148,163,184,0.1)',color:T.muted,fontSize:12,cursor:'pointer',lineHeight:1,opacity:i===0?0.3:1}},'↑'),
+          React.createElement('button',{onClick:()=>moveEx(i,1),disabled:i===draft.exercises.length-1,style:{width:40,height:34,borderRadius:4,border:'none',background:'rgba(148,163,184,0.1)',color:T.muted,fontSize:12,cursor:'pointer',lineHeight:1,opacity:i===draft.exercises.length-1?0.3:1}},'↓')
         ),
         React.createElement('div',{style:{flex:1,minWidth:0}},
           React.createElement('div',{style:{fontSize:13,fontWeight:600,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},ex.name)
@@ -1251,7 +1251,7 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onUnarchive,on
     const accent2=CAT[w.category]||'#06b6d4';
     return React.createElement('div',{style:{position:'fixed',inset:0,zIndex:300,background:T.bg,overflowY:'auto'}},
       React.createElement('div',{style:{position:'sticky',top:0,background:T.bg,borderBottom:'1px solid '+T.border,padding:'calc(env(safe-area-inset-top) + 14px) 16px 14px',display:'flex',alignItems:'center',gap:12,zIndex:10}},
-        React.createElement('button',{onClick:function(){setViewingRoutine(null);},style:{width:36,height:36,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:18,cursor:'pointer',flexShrink:0,WebkitTapHighlightColor:'transparent'}},'<'),
+        React.createElement('button',{onClick:function(){setViewingRoutine(null);},style:{width:44,height:44,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:18,cursor:'pointer',flexShrink:0,WebkitTapHighlightColor:'transparent'}},'<'),
         React.createElement('div',{style:{flex:1}},
           React.createElement('div',{style:{fontSize:17,fontWeight:700,color:T.text}},w.label),
           React.createElement('div',{style:{fontSize:11,color:T.dim,marginTop:2}},totalSets+' sets total')
@@ -1279,7 +1279,7 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onUnarchive,on
   if(generating){
     return React.createElement('div',{style:{position:'fixed',inset:0,zIndex:300,background:T.bg,overflowY:'auto'}},
       React.createElement('div',{style:{position:'sticky',top:0,background:T.bg,borderBottom:'1px solid '+T.border,padding:'calc(env(safe-area-inset-top) + 14px) 16px 14px',display:'flex',alignItems:'center',gap:12,zIndex:10}},
-        React.createElement('button',{onClick:function(){setGenerating(false);setGenResult(null);setGenError('');setGenPrompt('');},style:{width:36,height:36,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:18,cursor:'pointer',flexShrink:0}},'<'),
+        React.createElement('button',{onClick:function(){setGenerating(false);setGenResult(null);setGenError('');setGenPrompt('');},style:{width:44,height:44,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:18,cursor:'pointer',flexShrink:0}},'<'),
         React.createElement('div',{style:{fontSize:17,fontWeight:700,color:T.text}},'Generate Routine')
       ),
       React.createElement('div',{style:{padding:16}},
@@ -1486,7 +1486,7 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onUnarchive,on
     const archivedList=Object.entries(workouts).filter(([k,w])=>w.archived).sort((a,b)=>(a[1].label||'').localeCompare(b[1].label||''));
     return React.createElement('div',{style:{paddingBottom:80}},
       React.createElement('div',{style:{padding:'16px 16px 12px',position:'sticky',top:0,zIndex:5,background:T.bg,borderBottom:'1px solid '+T.border,display:'flex',alignItems:'center',gap:12}},
-        React.createElement('button',{onClick:()=>setShowArchived(false),style:{width:36,height:36,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:18,cursor:'pointer',flexShrink:0,WebkitTapHighlightColor:'transparent'}},'\u2039'),
+        React.createElement('button',{onClick:()=>setShowArchived(false),style:{width:44,height:44,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:18,cursor:'pointer',flexShrink:0,WebkitTapHighlightColor:'transparent'}},'\u2039'),
         React.createElement('div',{style:{fontSize:20,fontWeight:800,color:T.text}},'Archived ('+archivedList.length+')')
       ),
       React.createElement('div',{style:{padding:'12px 16px'}},
@@ -1507,7 +1507,7 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onUnarchive,on
     React.createElement('div',{style:{padding:'16px 16px 8px',position:'sticky',top:0,zIndex:5,background:T.bg,borderBottom:'1px solid '+T.border}},
       React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}},
         React.createElement('div',{style:{fontSize:22,fontWeight:800,color:T.text,letterSpacing:'-0.02em'}},'Routines'),
-        React.createElement('button',{onClick:()=>setShowArchived(true),style:{fontSize:12,color:T.dim,background:'transparent',border:'1px solid '+T.border2,borderRadius:8,padding:'6px 10px',cursor:'pointer',WebkitTapHighlightColor:'transparent'}},'Archived')
+        React.createElement('button',{onClick:()=>setShowArchived(true),style:{fontSize:12,fontWeight:600,color:T.sub,background:'rgba(255,255,255,0.03)',border:'1px solid '+T.border2,borderRadius:9,padding:'10px 14px',cursor:'pointer',WebkitTapHighlightColor:'transparent',minHeight:44}},'Archived')
       ),
       !reordering&&!archiving&&React.createElement('button',{onClick:function(){setGenerating(true);},style:{width:'100%',padding:'11px 16px',borderRadius:10,border:'none',background:GRAD.button,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',WebkitTapHighlightColor:'transparent',marginBottom:8,display:'flex',alignItems:'center',justifyContent:'center',gap:8}},
         React.createElement('span',null,'✨'),
@@ -1527,7 +1527,7 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onUnarchive,on
         )
       ),
       React.createElement('div',{style:{display:'flex',gap:6,overflowX:'auto',scrollbarWidth:'none',paddingBottom:4}},
-        chips.map(({id,label,color,bg})=>React.createElement('button',{key:id,onClick:()=>setFilterType(filterType===id?'all':id),style:{flexShrink:0,padding:'5px 12px',borderRadius:8,border:'1px solid '+(filterType===id?color+'80':'transparent'),background:filterType===id?bg:'transparent',color:filterType===id?color:T.dim,fontSize:12,fontWeight:filterType===id?700:400,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},label))
+        chips.map(({id,label,color,bg})=>React.createElement('button',{key:id,onClick:()=>setFilterType(filterType===id?'all':id),style:{flexShrink:0,padding:'10px 14px',borderRadius:9,border:'1px solid '+(filterType===id?color+'80':'transparent'),background:filterType===id?bg:'transparent',color:filterType===id?color:T.dim,fontSize:12,fontWeight:filterType===id?700:400,cursor:'pointer',WebkitTapHighlightColor:'transparent',minHeight:44,display:'flex',alignItems:'center'}},label))
       )
     ),
     React.createElement('div',{style:{padding:'8px 16px'}},
@@ -1554,8 +1554,8 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onUnarchive,on
               }
               return React.createElement('div',{key:w.key,style:{background:T.bg2,borderRadius:10,border:'1px solid '+T.border,padding:'10px 14px',display:'flex',alignItems:'center',gap:10}},
                 React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:3,flexShrink:0}},
-                  React.createElement('button',{onClick:()=>moveRoutine(-1),disabled:idx===0,style:{width:30,height:24,borderRadius:5,border:'none',background:'rgba(148,163,184,0.1)',color:T.muted,fontSize:13,cursor:'pointer',lineHeight:1,opacity:idx===0?0.3:1,WebkitTapHighlightColor:'transparent'}},'\u2191'),
-                  React.createElement('button',{onClick:()=>moveRoutine(1),disabled:idx===list.length-1,style:{width:30,height:24,borderRadius:5,border:'none',background:'rgba(148,163,184,0.1)',color:T.muted,fontSize:13,cursor:'pointer',lineHeight:1,opacity:idx===list.length-1?0.3:1,WebkitTapHighlightColor:'transparent'}},'\u2193')
+                  React.createElement('button',{onClick:()=>moveRoutine(-1),disabled:idx===0,style:{width:40,height:34,borderRadius:5,border:'none',background:'rgba(148,163,184,0.1)',color:T.muted,fontSize:13,cursor:'pointer',lineHeight:1,opacity:idx===0?0.3:1,WebkitTapHighlightColor:'transparent'}},'\u2191'),
+                  React.createElement('button',{onClick:()=>moveRoutine(1),disabled:idx===list.length-1,style:{width:40,height:34,borderRadius:5,border:'none',background:'rgba(148,163,184,0.1)',color:T.muted,fontSize:13,cursor:'pointer',lineHeight:1,opacity:idx===list.length-1?0.3:1,WebkitTapHighlightColor:'transparent'}},'\u2193')
                 ),
                 React.createElement('div',{style:{width:3,borderRadius:2,alignSelf:'stretch',background:tc,flexShrink:0}}),
                 React.createElement('div',{style:{flex:1,minWidth:0}},React.createElement('div',{style:{fontSize:14,fontWeight:600,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},w.label)),
@@ -1579,12 +1579,12 @@ function RoutinesTab({workouts,onStartWorkout,onReorder,onArchive,onUnarchive,on
                   React.createElement('div',{style:{fontSize:14,fontWeight:700,color:T.text,lineHeight:1.25,flex:1}},w.label),
                   archiving
                     ?React.createElement('div',{style:{width:22,height:22,borderRadius:6,border:'2px solid '+(isSelected?'#f87171':T.border2),background:isSelected?'rgba(239,68,68,0.2)':'transparent',color:'#f87171',fontSize:12,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}},isSelected?'✓':'')
-                    :React.createElement('button',{onClick:e=>{e.stopPropagation();setActionSheet(w.key);},style:{width:24,height:24,borderRadius:6,border:'none',background:'rgba(255,255,255,0.06)',color:T.dim,fontSize:14,cursor:'pointer',flexShrink:0,WebkitTapHighlightColor:'transparent',lineHeight:1}},'⋯')
+                    :React.createElement('button',{onClick:e=>{e.stopPropagation();setActionSheet(w.key);},style:{width:36,height:36,borderRadius:6,border:'none',background:'rgba(255,255,255,0.06)',color:T.dim,fontSize:14,cursor:'pointer',flexShrink:0,WebkitTapHighlightColor:'transparent',lineHeight:1}},'⋯')
                 ),
                 React.createElement('div',{style:{fontSize:11,color:T.dim,marginTop:4,lineHeight:1.4,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',flex:1}},exNames),
                 React.createElement('div',{style:{display:'flex',alignItems:'center',gap:4,marginTop:8}},
-                  lastUsed&&React.createElement('div',{style:{fontSize:10,color:T.dim,fontStyle:'italic'}},'⏱ '+lastUsed),
-                  !lastUsed&&React.createElement('div',{style:{fontSize:10,color:tc,fontWeight:700}},TYPE_LABELS[w.wtype]||w.tag||'')
+                  lastUsed&&React.createElement('div',{style:{fontSize:11,color:T.dim,fontStyle:'italic'}},'⏱ '+lastUsed),
+                  !lastUsed&&React.createElement('div',{style:{fontSize:11,color:tc,fontWeight:700}},TYPE_LABELS[w.wtype]||w.tag||'')
                 )
               );
             })
@@ -2130,14 +2130,14 @@ function OverloadCard({allLogs,workouts,schedule}){
     React.createElement('div',{onClick:()=>setExpanded(e=>!e),style:{padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},
       React.createElement('div',{style:{fontSize:16}},'\uD83D\uDCC8'),
       React.createElement('div',{style:{flex:1}},
-        React.createElement('div',{style:{fontSize:13,fontWeight:700,color:T.text}},'Progressive Overload'),
-        React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1}},'This week vs last week')
+        React.createElement('div',{style:{fontSize:16,fontWeight:700,color:T.text}},'Progressive Overload'),
+        React.createElement('div',{style:{fontSize:12,color:T.dim,marginTop:2}},'This week vs last week')
       ),
       React.createElement('div',{style:{fontSize:13,color:T.dim}},expanded?'\u2303':'\u2304')
     ),
     expanded&&React.createElement('div',{style:{padding:'0 16px 14px'}},
       React.createElement('div',{style:{display:'flex',gap:6,marginBottom:12}},
-        ['all','upcoming','up','down','new'].map(f=>React.createElement('button',{key:f,onClick:()=>setFilter(f),style:{flex:1,padding:'5px 4px',borderRadius:7,border:'1px solid '+(filter===f?'rgba(124,58,237,0.5)':'transparent'),background:filter===f?'rgba(124,58,237,0.2)':'rgba(255,255,255,0.04)',color:filter===f?'#a78bfa':T.dim,fontSize:11,fontWeight:filter===f?700:400,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},f==='all'?'Active':f==='upcoming'?'Upcoming':f==='up'?'\u2191 PR':f==='down'?'\u2193 Drop':'New'))
+        ['all','upcoming','up','down','new'].map(f=>React.createElement('button',{key:f,onClick:()=>setFilter(f),style:{flex:1,padding:'11px 4px',borderRadius:7,border:'1px solid '+(filter===f?'rgba(124,58,237,0.5)':'transparent'),background:filter===f?'rgba(124,58,237,0.2)':'rgba(255,255,255,0.04)',color:filter===f?'#a78bfa':T.dim,fontSize:12,fontWeight:filter===f?700:400,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},f==='all'?'Active':f==='upcoming'?'Upcoming':f==='up'?'\u2191 PR':f==='down'?'\u2193 Drop':'New'))
       ),
       filtered.length===0&&React.createElement('div',{style:{fontSize:13,color:T.dim,textAlign:'center',padding:'12px 0'}},'No data for this filter yet'),
       filtered.slice(0,20).map(e=>{
@@ -2148,21 +2148,21 @@ function OverloadCard({allLogs,workouts,schedule}){
           React.createElement('div',{style:{display:'flex',alignItems:'center',gap:10,marginBottom:e.nextWeight!==null?6:0}},
             React.createElement('div',{style:{fontSize:14,color,fontWeight:800,width:16,textAlign:'center',flexShrink:0}},arrow),
             React.createElement('div',{style:{flex:1,minWidth:0}},
-              React.createElement('div',{style:{fontSize:13,fontWeight:600,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},e.name),
-              React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1}},
+              React.createElement('div',{style:{fontSize:14,fontWeight:600,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},e.name),
+              React.createElement('div',{style:{fontSize:11,color:T.dim,marginTop:2}},
                 e.lastWeek.sets>0?('Last: '+e.lastWeek.max+'lb \u00d7 '+Math.round(e.lastWeek.vol/e.lastWeek.sets/(e.lastWeek.max||1)||1)+' avg reps'):'New this week'
               )
             ),
             React.createElement('div',{style:{textAlign:'right',flexShrink:0}},
-              e.thisWeek.max>0&&React.createElement('div',{style:{fontSize:13,fontWeight:700,color,fontFamily:T.mono}},
+              e.thisWeek.max>0&&React.createElement('div',{style:{fontSize:14,fontWeight:700,color,fontFamily:T.mono}},
                 e.lastWeek.sets>0?((up&&e.e1rmDelta>0?'+':'')+e.e1rmDelta+' e1RM'):'\u2014'
               ),
-              React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1}},e.thisWeek.sets+' sets')
+              React.createElement('div',{style:{fontSize:11,color:T.dim,marginTop:2}},e.thisWeek.sets+' sets')
             )
           ),
-          e.nextWeight!==null&&e.nextWeight!==undefined&&React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 10px',background:'rgba(124,58,237,0.08)',borderRadius:7,marginLeft:26}},
+          e.nextWeight!==null&&e.nextWeight!==undefined&&React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 12px',background:'rgba(124,58,237,0.08)',borderRadius:8,marginLeft:26}},
             React.createElement('div',{style:{fontSize:11,color:T.dim}},(e.nextNote||'Next session')+(e.isRamp?' \u00b7 top set '+e.lastWeight+'\u00d7'+e.lastReps:'')),
-            React.createElement('div',{style:{fontSize:13,fontWeight:700,color:'#a78bfa',fontFamily:T.mono}},e.nextWeight+'lb')
+            React.createElement('div',{style:{fontSize:14,fontWeight:700,color:'#a78bfa',fontFamily:T.mono}},e.nextWeight+'lb')
           )
         );
       })
@@ -2483,20 +2483,20 @@ function MacroCard({profile,onSaveProfile}){
     React.createElement('div',{onClick:function(){setCollapsed(function(v){return !v;});},style:{padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},
       React.createElement('div',{style:{fontSize:16}},'\uD83E\uDD69'),
       React.createElement('div',{style:{flex:1}},
-        React.createElement('div',{style:{fontSize:13,fontWeight:700,color:T.text}},'Macros'+(isToday?'':' \u2014 '+dateLabel)),
-        React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1}},tot.cal+' / '+calTarget+' cal')
+        React.createElement('div',{style:{fontSize:16,fontWeight:700,color:T.text}},'Macros'+(isToday?'':' \u2014 '+dateLabel)),
+        React.createElement('div',{style:{fontSize:12,color:T.dim,marginTop:2}},tot.cal+' / '+calTarget+' cal')
       ),
       React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6}},
-        React.createElement('button',{onClick:function(e){e.stopPropagation();setDayOffset(function(o){return o-1;});if(collapsed)setCollapsed(false);},style:{width:28,height:28,borderRadius:7,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:16,cursor:'pointer',WebkitTapHighlightColor:'transparent',lineHeight:1}},'\u2039'),
-        !isToday&&React.createElement('button',{onClick:function(e){e.stopPropagation();setDayOffset(function(o){return Math.min(o+1,0);});},style:{width:28,height:28,borderRadius:7,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:16,cursor:'pointer',WebkitTapHighlightColor:'transparent',lineHeight:1}},'\u203a'),
+        React.createElement('button',{onClick:function(e){e.stopPropagation();setDayOffset(function(o){return o-1;});if(collapsed)setCollapsed(false);},style:{width:40,height:40,borderRadius:7,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:16,cursor:'pointer',WebkitTapHighlightColor:'transparent',lineHeight:1}},'\u2039'),
+        !isToday&&React.createElement('button',{onClick:function(e){e.stopPropagation();setDayOffset(function(o){return Math.min(o+1,0);});},style:{width:40,height:40,borderRadius:7,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:16,cursor:'pointer',WebkitTapHighlightColor:'transparent',lineHeight:1}},'\u203a'),
         React.createElement('div',{style:{fontSize:13,color:T.dim,marginLeft:2}},collapsed?'\u2304':'\u2303')
       )
     ),
     !collapsed&&React.createElement('div',{style:{padding:'0 16px 14px'}},
       React.createElement('div',{style:{marginBottom:12}},
         React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:4}},
-          React.createElement('div',{style:{fontSize:12,color:T.sub,fontWeight:600}},'Calories'),
-          React.createElement('div',{style:{fontSize:13,fontFamily:T.mono,fontWeight:700,color:barColor(tot.cal,calTarget)}},tot.cal+' / '+calTarget)
+          React.createElement('div',{style:{fontSize:14,color:T.text,fontWeight:700}},'Calories'),
+          React.createElement('div',{style:{fontSize:16,fontFamily:T.mono,fontWeight:800,color:barColor(tot.cal,calTarget)}},tot.cal+' / '+calTarget)
         ),
         React.createElement('div',{style:{height:8,borderRadius:4,background:'rgba(148,163,184,0.12)',overflow:'hidden'}},
           React.createElement('div',{style:{height:'100%',width:Math.min(100,calTarget?Math.round(tot.cal/calTarget*100):0)+'%',background:barColor(tot.cal,calTarget),borderRadius:4,transition:'width 0.4s ease'}})
@@ -2506,8 +2506,8 @@ function MacroCard({profile,onSaveProfile}){
         var p=m.t?Math.min(100,Math.round(m.v/m.t*100)):0;
         return React.createElement('div',{key:m.k,style:{marginBottom:8}},
           React.createElement('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:3}},
-            React.createElement('div',{style:{fontSize:11,color:T.dim}},m.k),
-            React.createElement('div',{style:{fontSize:11,fontFamily:T.mono,color:T.sub}},m.v+' / '+(m.t||'\u2014')+'g')
+            React.createElement('div',{style:{fontSize:12,color:T.sub,fontWeight:600}},m.k),
+            React.createElement('div',{style:{fontSize:12,fontFamily:T.mono,color:T.text,fontWeight:600}},m.v+' / '+(m.t||'\u2014')+'g')
           ),
           React.createElement('div',{style:{height:4,borderRadius:2,background:'rgba(148,163,184,0.12)',overflow:'hidden'}},
             React.createElement('div',{style:{height:'100%',width:p+'%',background:m.c,borderRadius:2,transition:'width 0.4s ease'}})
@@ -2539,8 +2539,8 @@ function MacroCard({profile,onSaveProfile}){
             ),
             e.note&&React.createElement('div',{style:{fontSize:9,color:T.dim,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',opacity:0.8}},e.note)
           ),
-          React.createElement('button',{onClick:function(){openEdit(e);},style:{width:22,height:22,borderRadius:5,border:'1px solid '+T.border2,background:'transparent',color:T.dim,fontSize:10,cursor:'pointer',flexShrink:0,lineHeight:1,WebkitTapHighlightColor:'transparent'}},'\u270e'),
-          React.createElement('button',{onClick:function(){removeEntry(e.ts);},style:{width:22,height:22,borderRadius:5,border:'none',background:'rgba(239,68,68,0.12)',color:'#f87171',fontSize:13,cursor:'pointer',flexShrink:0,lineHeight:1,WebkitTapHighlightColor:'transparent'}},'\u00d7')
+          React.createElement('button',{onClick:function(){openEdit(e);},style:{width:36,height:36,borderRadius:5,border:'1px solid '+T.border2,background:'transparent',color:T.dim,fontSize:10,cursor:'pointer',flexShrink:0,lineHeight:1,WebkitTapHighlightColor:'transparent'}},'\u270e'),
+          React.createElement('button',{onClick:function(){removeEntry(e.ts);},style:{width:36,height:36,borderRadius:5,border:'none',background:'rgba(239,68,68,0.12)',color:'#f87171',fontSize:13,cursor:'pointer',flexShrink:0,lineHeight:1,WebkitTapHighlightColor:'transparent'}},'\u00d7')
         );
       }),
       !showAdd&&React.createElement('div',{style:{display:'flex',gap:8,marginTop:10}},
@@ -2717,7 +2717,7 @@ function BodyweightCard({profile,onSaveProfile}){
           React.createElement('div',{style:{flex:1,fontSize:12,color:T.sub,fontFamily:T.mono}},e.date),
           d!==null&&React.createElement('div',{style:{fontSize:11,fontFamily:T.mono,color:d>0?'#fbbf24':d<0?'#38bdf8':T.dim}},(d>0?'+':'')+d.toFixed(1)),
           React.createElement('div',{style:{fontSize:13,fontWeight:600,color:T.text,fontFamily:T.mono,minWidth:52,textAlign:'right'}},e.weight+unit),
-          React.createElement('button',{onClick:function(){removeEntry(e.date);},style:{width:20,height:20,borderRadius:5,border:'none',background:'rgba(239,68,68,0.12)',color:'#f87171',fontSize:12,cursor:'pointer',flexShrink:0,lineHeight:1,WebkitTapHighlightColor:'transparent'}},'\u00d7')
+          React.createElement('button',{onClick:function(){removeEntry(e.date);},style:{width:36,height:36,borderRadius:5,border:'none',background:'rgba(239,68,68,0.12)',color:'#f87171',fontSize:12,cursor:'pointer',flexShrink:0,lineHeight:1,WebkitTapHighlightColor:'transparent'}},'\u00d7')
         );
       }),
       log.length>10&&React.createElement('div',{style:{fontSize:10,color:T.dim,textAlign:'center',paddingTop:8}},'Showing 10 of '+log.length+' entries')
@@ -2822,8 +2822,8 @@ function VolumeGapCard({allLogs,workouts,schedule,customBp,profile,onSaveProfile
     React.createElement('div',{onClick:function(){setOpen(false);},style:{padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},
       React.createElement('div',{style:{fontSize:16}},'\u26A0\uFE0F'),
       React.createElement('div',{style:{flex:1}},
-        React.createElement('div',{style:{fontSize:13,fontWeight:700,color:T.text}},'Volume gaps'),
-        React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:1}},sug.daysLeft+' training day'+(sug.daysLeft===1?'':'s')+' left this week')
+        React.createElement('div',{style:{fontSize:16,fontWeight:700,color:T.text}},'Volume gaps'),
+        React.createElement('div',{style:{fontSize:12,color:T.dim,marginTop:2}},sug.daysLeft+' training day'+(sug.daysLeft===1?'':'s')+' left this week')
       ),
       React.createElement('div',{style:{fontSize:13,color:T.dim}},'\u2303')
     ),
@@ -2832,8 +2832,8 @@ function VolumeGapCard({allLogs,workouts,schedule,customBp,profile,onSaveProfile
         return React.createElement('div',{key:g.bodyPart,style:{padding:'10px 0',borderTop:'1px solid '+T.border}},
           React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:6}},
             React.createElement('div',{style:{flex:1}},
-              React.createElement('div',{style:{fontSize:13,fontWeight:600,color:T.text}},g.bodyPart),
-              React.createElement('div',{style:{fontSize:10,color:g.covered?'#34d399':T.dim,marginTop:1,fontFamily:T.mono}},
+              React.createElement('div',{style:{fontSize:14,fontWeight:600,color:T.text}},g.bodyPart),
+              React.createElement('div',{style:{fontSize:11,color:g.covered?'#34d399':T.dim,marginTop:2,fontFamily:T.mono}},
                 g.done+'/'+g.target+' \u00b7 '+g.short+' short'+
                 (g.scheduled?' \u00b7 '+g.scheduled+' scheduled':'')+
                 (g.covered?' \u00b7 covered':' \u00b7 '+g.stillShort+' uncovered')
@@ -2841,7 +2841,7 @@ function VolumeGapCard({allLogs,workouts,schedule,customBp,profile,onSaveProfile
             ),
             React.createElement('button',{
               onClick:function(){dismiss(g.bodyPart);},
-              style:{width:22,height:22,borderRadius:5,border:'1px solid '+T.border2,background:'transparent',color:T.dim,fontSize:12,cursor:'pointer',flexShrink:0,lineHeight:1,WebkitTapHighlightColor:'transparent'}
+              style:{width:36,height:36,borderRadius:5,border:'1px solid '+T.border2,background:'transparent',color:T.dim,fontSize:12,cursor:'pointer',flexShrink:0,lineHeight:1,WebkitTapHighlightColor:'transparent'}
             },'\u00d7')
           ),
           g.candidates.length>0
@@ -2967,8 +2967,8 @@ function DashboardTab({allLogs,workouts,schedule,restDefaults,customBp,setCustom
           (isViewingToday&&trainedToday)?('\u2713 Logged \u00b7 '+viewDay):dayLabel
         ),
         React.createElement('div',{style:{display:'flex',gap:4,flexShrink:0}},
-          dayOffset>0&&React.createElement('button',{onClick:function(){setDayOffset(function(o){return o-1;});},style:{width:24,height:24,borderRadius:6,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:14,cursor:'pointer',lineHeight:1,WebkitTapHighlightColor:'transparent'}},'\u2039'),
-          React.createElement('button',{onClick:function(){setDayOffset(function(o){return Math.min(o+1,6);});},style:{width:24,height:24,borderRadius:6,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:14,cursor:'pointer',lineHeight:1,WebkitTapHighlightColor:'transparent'}},'\u203a')
+          dayOffset>0&&React.createElement('button',{onClick:function(){setDayOffset(function(o){return o-1;});},style:{width:40,height:40,borderRadius:6,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:14,cursor:'pointer',lineHeight:1,WebkitTapHighlightColor:'transparent'}},'\u2039'),
+          React.createElement('button',{onClick:function(){setDayOffset(function(o){return Math.min(o+1,6);});},style:{width:40,height:40,borderRadius:6,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:14,cursor:'pointer',lineHeight:1,WebkitTapHighlightColor:'transparent'}},'\u203a')
         )
       ),
       React.createElement('div',{style:{fontSize:20,fontWeight:800,color:T.text,marginBottom:12}},todayWorkout.label),
@@ -3129,9 +3129,9 @@ function ScheduleTab({schedule,workouts,onSave}){
                 color:isToday?'#a78bfa':T.dim,fontWeight:isToday?700:400}},
                 day+(isToday?' \u2014 Today':'')),
               React.createElement('div',{style:{fontSize:15,
-                fontWeight:workout?600:400,color:workout?T.text:T.dim}},
+                fontWeight:workout?700:400,color:workout?T.text:T.dim}},
                 workout?workout.label:'Rest'),
-              workout&&React.createElement('div',{style:{fontSize:10,color:T.dim,marginTop:2,fontFamily:T.mono}},
+              workout&&React.createElement('div',{style:{fontSize:11,color:T.dim,marginTop:2,fontFamily:T.mono}},
                 exs.length+' exercises \u00b7 '+tot+' sets')
             ),
             workout&&React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,flexShrink:0}},
@@ -3440,8 +3440,11 @@ function PPLTracker(){
     // Header
     React.createElement('div',{style:{position:'sticky',top:0,zIndex:10,backdropFilter:'blur(16px)',borderBottom:'1px solid '+T.border,padding:'0 16px',background:'linear-gradient(180deg,'+T.bg+'f8 0%,'+T.bg+'e0 100%)'}},
       React.createElement('div',{style:{position:'relative',display:'flex',alignItems:'center',justifyContent:'center',paddingTop:18,paddingBottom:14}},
-        React.createElement('div',{style:{fontSize:30,fontFamily:"'Anton',sans-serif",transform:'skewX(-8deg)',background:GRAD.accent,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',letterSpacing:'0.01em',textTransform:'uppercase'}},'FitLog'),
-        React.createElement('button',{onClick:function(){setTab('settings');},style:{position:'absolute',right:0,width:38,height:38,borderRadius:10,border:'1px solid '+T.border2,background:'rgba(255,255,255,0.03)',color:T.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,WebkitTapHighlightColor:'transparent'}},'\u2699')
+        React.createElement('div',{style:{fontSize:26,fontFamily:"'Russo One',sans-serif",letterSpacing:'0.06em',textTransform:'uppercase',display:'flex',gap:1}},
+          React.createElement('span',{style:{background:GRAD.accent,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text'}},'Fit'),
+          React.createElement('span',{style:{color:T.text}},'Log')
+        ),
+        React.createElement('button',{onClick:function(){setTab('settings');},style:{position:'absolute',right:0,width:44,height:44,borderRadius:10,border:'1px solid '+T.border2,background:'rgba(255,255,255,0.03)',color:T.muted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,WebkitTapHighlightColor:'transparent'}},'\u2699')
       )
     ),
 
@@ -3501,7 +3504,7 @@ function PPLTracker(){
 
     tab==='settings'&&React.createElement('div',{style:{padding:'16px 16px 100px'}},
       React.createElement('div',{style:{display:'flex',alignItems:'center',gap:12,marginBottom:16}},
-        React.createElement('button',{onClick:function(){setTab('dashboard');},style:{width:36,height:36,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:18,cursor:'pointer',flexShrink:0,WebkitTapHighlightColor:'transparent'}},'<'),
+        React.createElement('button',{onClick:function(){setTab('dashboard');},style:{width:44,height:44,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:18,cursor:'pointer',flexShrink:0,WebkitTapHighlightColor:'transparent'}},'<'),
         React.createElement('div',{style:{fontSize:20,fontWeight:700,color:T.text}},'Settings')
       ),
 
@@ -3597,7 +3600,10 @@ function AuthScreen({onAuthed}){
   return React.createElement('div',{style:{minHeight:'100vh',background:T.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,fontFamily:T.sans}},
     React.createElement('div',{style:{width:'100%',maxWidth:360}},
       React.createElement('div',{style:{textAlign:'center',marginBottom:32}},
-        React.createElement('div',{style:{fontSize:42,fontFamily:"'Anton',sans-serif",transform:'skewX(-8deg)',background:GRAD.accent,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',letterSpacing:'0.01em',textTransform:'uppercase'}},'FitLog'),
+        React.createElement('div',{style:{fontSize:36,fontFamily:"'Russo One',sans-serif",letterSpacing:'0.06em',textTransform:'uppercase',display:'flex',justifyContent:'center',gap:1}},
+          React.createElement('span',{style:{background:GRAD.accent,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text'}},'Fit'),
+          React.createElement('span',{style:{color:T.text}},'Log')
+        ),
         React.createElement('div',{style:{fontSize:13,color:T.muted,marginTop:6}},mode==='login'?'Welcome back':'Create your account')
       ),
       React.createElement('form',{onSubmit:handleSubmit},
