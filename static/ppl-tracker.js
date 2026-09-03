@@ -346,7 +346,8 @@ const TARGET_VOLUME={Chest:[20,24],Back:[22,26],Shoulders:[20,24],Biceps:[15,19]
 // today+offset. Used to project where weekly volume will land if the plan runs.
 function getPlannedVolume(workouts,schedule,customBp,offset){
   var out={};
-  if(!offset||offset<1)return out;
+  var byExercise={};
+  if(!offset||offset<1)return{totals:out,byExercise:byExercise};
   var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   var base=new Date();
   var weekEnd=getWeekRange(base).end;
@@ -361,10 +362,22 @@ function getPlannedVolume(workouts,schedule,customBp,offset){
     w.exercises.forEach(function(ex){
       if(!ex||!ex.id)return;
       var bp=(customBp&&customBp[ex.id])?customBp[ex.id]:inferBodyPart(ex.name);
-      out[bp]=(out[bp]||0)+(parseInt(ex.sets)||0);
+      var sets=parseInt(ex.sets)||0;
+      out[bp]=(out[bp]||0)+sets;
+      if(!byExercise[bp])byExercise[bp]={};
+      if(!byExercise[bp][ex.id]){
+        byExercise[bp][ex.id]={exId:ex.id,name:ex.name,sets:0,day:dn};
+      }
+      byExercise[bp][ex.id].sets+=sets;
     });
   }
-  return out;
+  // Flatten the per-bodypart exercise maps into arrays, same shape as byExercise
+  // used for logged sets, so the UI can render both with identical code.
+  var flatByExercise={};
+  Object.keys(byExercise).forEach(function(bp){
+    flatByExercise[bp]=Object.values(byExercise[bp]);
+  });
+  return{totals:out,byExercise:flatByExercise};
 }
 function WeeklyVolumeCard({allLogs,customBp,setCustomBp,workouts,schedule,projectOffset}){
   const[collapsed,setCollapsed]=useState(false);
@@ -376,8 +389,10 @@ function WeeklyVolumeCard({allLogs,customBp,setCustomBp,workouts,schedule,projec
   // tick forces re-read of localStorage overrides after saving a body part change
   var refDate=new Date();refDate.setDate(refDate.getDate()+weekOffset*7);
   var _vd=getWeeklyVolume(allLogs,refDate,customBp);
-  var planned=(weekOffset===0&&projectOffset>0&&workouts&&schedule)
-    ? getPlannedVolume(workouts,schedule,customBp,projectOffset) : {};
+  var plannedResult=(weekOffset===0&&projectOffset>0&&workouts&&schedule)
+    ? getPlannedVolume(workouts,schedule,customBp,projectOffset) : {totals:{},byExercise:{}};
+  var planned=plannedResult.totals;
+  var plannedByExercise=plannedResult.byExercise;
   var hasPlan=Object.keys(planned).length>0;
   var byBodyPart=_vd.byBodyPart;
   var byExercise=_vd.byExercise;
@@ -466,6 +481,22 @@ function WeeklyVolumeCard({allLogs,customBp,setCustomBp,workouts,schedule,projec
                 React.createElement('div',{style:{flex:1,minWidth:0,fontSize:12,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',marginRight:8}},ex.name),
                 React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,flexShrink:0}},
                   React.createElement('div',{style:{fontSize:11,color:T.dim,fontFamily:T.mono}},ex.sets+' sets'),
+                  React.createElement('button',{
+                    onClick:function(e){e.stopPropagation();setEditingEx({exId:ex.exId,name:ex.name,currentBp:bp});},
+                    style:{fontSize:10,padding:'2px 8px',borderRadius:5,border:'1px solid '+T.border2,background:'transparent',color:T.dim,cursor:'pointer',WebkitTapHighlightColor:'transparent'}
+                  },'edit')
+                )
+              );
+            })
+          ),
+          isExpanded&&(plannedByExercise[bp]||[]).length>0&&React.createElement('div',{style:{background:'rgba(124,58,237,0.06)',border:'1px dashed rgba(124,58,237,0.3)',borderRadius:8,padding:'4px 8px',marginBottom:2}},
+            React.createElement('div',{style:{fontSize:10,color:'#a78bfa',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',padding:'6px 0 2px'}},'Upcoming'),
+            (plannedByExercise[bp]||[]).map(function(ex,i){
+              var lst=plannedByExercise[bp]||[];
+              return React.createElement('div',{key:'plan_'+ex.exId,style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderBottom:i<lst.length-1?'1px solid '+T.border:'none'}},
+                React.createElement('div',{style:{flex:1,minWidth:0,fontSize:12,color:T.sub,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',marginRight:8}},ex.name+' \u00b7 '+ex.day),
+                React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,flexShrink:0}},
+                  React.createElement('div',{style:{fontSize:11,color:'#a78bfa',fontFamily:T.mono}},ex.sets+' sets'),
                   React.createElement('button',{
                     onClick:function(e){e.stopPropagation();setEditingEx({exId:ex.exId,name:ex.name,currentBp:bp});},
                     style:{fontSize:10,padding:'2px 8px',borderRadius:5,border:'1px solid '+T.border2,background:'transparent',color:T.dim,cursor:'pointer',WebkitTapHighlightColor:'transparent'}
