@@ -2743,6 +2743,98 @@ function MacroCard({profile,onSaveProfile}){
 }
 
 // ── BODYWEIGHT TRACKER ───────────────────────────────────────
+// ── HEALTH METRICS (from PeptideTrack, read-only) ──────────────────────────────
+function HealthMetricsCard(){
+  const[collapsed,setCollapsed]=useState(false);
+  const[data,setData]=useState(null);
+  const[loading,setLoading]=useState(true);
+
+  useEffect(function(){
+    (async function(){
+      try{
+        const{data:{user}}=await supabase.auth.getUser();
+        if(!user){setLoading(false);return;}
+        const session=await supabase.auth.getSession();
+        const token=(session.data&&session.data.session)?session.data.session.access_token:'';
+        const resp=await fetch('/api/health-metrics?user_id='+user.id,{
+          headers:{'Authorization':'Bearer '+token}
+        });
+        const json=await resp.json();
+        setData(json);
+      }catch(err){
+        setData({weight:[],bodyFat:[]});
+      }
+      setLoading(false);
+    })();
+  },[]);
+
+  if(loading)return null;
+  if(!data||(!data.weight.length&&!data.bodyFat.length))return null;
+
+  function latest(arr){return arr.length?arr[arr.length-1].value:null;}
+  function chartLine(arr,color){
+    if(arr.length<2)return null;
+    var vals=arr.map(function(p){return p.value;});
+    var mn=Math.min.apply(null,vals),mx=Math.max.apply(null,vals);
+    var range=(mx-mn)||1;
+    var W=100,H=40,pad=2;
+    var coords=arr.map(function(p,i){
+      var x=pad+(i/(arr.length-1))*(W-pad*2);
+      var y=pad+(1-((p.value-mn)/range))*(H-pad*2);
+      return[x,y];
+    });
+    var d=coords.map(function(pt,i){return(i===0?'M':'L')+pt[0].toFixed(1)+' '+pt[1].toFixed(1);}).join(' ');
+    return React.createElement('div',{style:{marginBottom:4}},
+      React.createElement('svg',{viewBox:'0 0 '+W+' '+H,preserveAspectRatio:'none',style:{width:'100%',height:56,display:'block'}},
+        React.createElement('path',{d:d,fill:'none',stroke:color,strokeWidth:1.5,strokeLinejoin:'round',strokeLinecap:'round',vectorEffect:'non-scaling-stroke'}),
+        React.createElement('circle',{cx:coords[coords.length-1][0],cy:coords[coords.length-1][1],r:1.5,fill:color})
+      ),
+      React.createElement('div',{style:{display:'flex',justifyContent:'space-between',marginTop:2}},
+        React.createElement('div',{style:{fontSize:9,color:T.dim,fontFamily:T.mono}},arr[0].date.slice(5)),
+        React.createElement('div',{style:{fontSize:9,color:T.dim,fontFamily:T.mono}},arr[0].value.toFixed(1)+'\u2192'+arr[arr.length-1].value.toFixed(1)),
+        React.createElement('div',{style:{fontSize:9,color:T.dim,fontFamily:T.mono}},arr[arr.length-1].date.slice(5))
+      )
+    );
+  }
+
+  var lastW=latest(data.weight),lastBf=latest(data.bodyFat);
+  var cutoff30=new Date();cutoff30.setDate(cutoff30.getDate()-30);
+  var recent30=data.weight.filter(function(p){return new Date(p.date)>=cutoff30;});
+  var trend30=(recent30.length>1)?(recent30[recent30.length-1].value-recent30[0].value):null;
+
+  return React.createElement('div',{style:{margin:'0 16px 12px',background:T.bg2,borderRadius:14,border:'1px solid '+T.border,overflow:'hidden'}},
+    React.createElement('div',{onClick:function(){setCollapsed(function(v){return !v;});},style:{padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},
+      React.createElement('div',{style:{fontSize:16}},'\uD83D\uDCCA'),
+      React.createElement('div',{style:{flex:1}},
+        React.createElement('div',{style:{fontSize:16,fontWeight:700,color:T.text}},'Health Metrics'),
+        React.createElement('div',{style:{fontSize:12,color:T.dim,marginTop:2}},'Synced from PeptideTrack')
+      ),
+      React.createElement('div',{style:{fontSize:13,color:T.dim}},collapsed?'\u2304':'\u2303')
+    ),
+    !collapsed&&React.createElement('div',{style:{padding:'0 16px 14px'}},
+      React.createElement('div',{style:{display:'flex',gap:10,marginBottom:14}},
+        lastW!==null&&React.createElement('div',{style:{flex:1,padding:'10px 12px',background:T.bg3,borderRadius:9}},
+          React.createElement('div',{style:{fontSize:10,color:T.dim,marginBottom:2}},'WEIGHT'),
+          React.createElement('div',{style:{fontSize:20,fontWeight:700,color:T.text,fontFamily:T.mono}},lastW,React.createElement('span',{style:{fontSize:11,color:T.dim}},' lbs')),
+          trend30!==null&&React.createElement('div',{style:{fontSize:11,fontFamily:T.mono,fontWeight:600,marginTop:2,color:trend30>0?'#fbbf24':trend30<0?'#38bdf8':T.dim}},(trend30>0?'+':'')+trend30.toFixed(1)+' (30d)')
+        ),
+        lastBf!==null&&React.createElement('div',{style:{flex:1,padding:'10px 12px',background:T.bg3,borderRadius:9}},
+          React.createElement('div',{style:{fontSize:10,color:T.dim,marginBottom:2}},'BODY FAT'),
+          React.createElement('div',{style:{fontSize:20,fontWeight:700,color:T.text,fontFamily:T.mono}},lastBf+'%')
+        )
+      ),
+      data.weight.length>=2&&React.createElement('div',{style:{marginBottom:14}},
+        React.createElement('div',{style:{fontSize:10,color:T.dim,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}},'Weight Trend'),
+        chartLine(data.weight,'#2dd4bf')
+      ),
+      data.bodyFat.length>=2&&React.createElement('div',null,
+        React.createElement('div',{style:{fontSize:10,color:T.dim,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}},'Body Fat Trend'),
+        chartLine(data.bodyFat,'#a78bfa')
+      )
+    )
+  );
+}
+
 function BodyweightCard({profile,onSaveProfile}){
   const[collapsed,setCollapsed]=useState(false);
   const[adding,setAdding]=useState(false);
@@ -3624,7 +3716,7 @@ function PPLTracker(){
         React.createElement('div',{style:{fontSize:20,fontWeight:700,color:T.text}},'Daily')
       ),
       React.createElement(MacroCard,{profile,onSaveProfile:setProfile}),
-      React.createElement(BodyweightCard,{profile,onSaveProfile:setProfile})
+      React.createElement(HealthMetricsCard,null)
     ),
 
     tab==='schedule'&&React.createElement(ScheduleTab,{

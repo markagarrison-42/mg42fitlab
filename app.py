@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify, send_file
 import os, json, io, sqlite3, time
+import pymysql
 from datetime import datetime, timedelta
 
 from pywebpush import webpush, WebPushException
@@ -13,6 +14,56 @@ DB_PATH  = os.path.join(os.path.dirname(__file__), "fitlog.db")
 # ── SCHEDULER ─────────────────────────────────────────────────────────────────
 scheduler = BackgroundScheduler(daemon=True)
 scheduler.start()
+
+# ── PEPTIDETRACK HEALTH METRICS (read-only cross-app) ─────────────────────────
+# FitLog user -> PeptideTrack patient_id mapping. Emails don't always match
+# across the two apps (e.g. Eileen uses a different login on each), so this
+# has to be explicit rather than looked up by email.
+PEPTIDETRACK_PATIENT_MAP = {
+    "657b7583-772a-4f6a-82cc-1fdd1bf0f976": 1,   # mark.a.garrison@gmail.com
+    "73c6b5e6-5806-4945-ac73-417aa123fec2": 17,  # eileen.p.garrison@gmail.com -> PeptideTrack patient 17
+}
+
+def get_peptidetrack_conn():
+    return pymysql.connect(
+        host=os.environ.get("PT_DB_HOST", "madfella.mysql.pythonanywhere-services.com"),
+        user=os.environ.get("PT_DB_USER", "madfella"),
+        password=os.environ.get("PT_DB_PASS", ""),
+        database="madfella$peptidetrack",
+        cursorclass=pymysql.cursors.DictCursor,
+        connect_timeout=5,
+    )
+
+@app.route("/api/health-metrics")
+def health_metrics():
+    from flask import request as _req
+    auth_header = _req.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return jsonify({"error": "Unauthorized"}), 401
+    user_id = _req.args.get("user_id", "")
+    patient_id = PEPTIDETRACK_PATIENT_MAP.get(user_id)
+    if not patient_id:
+        return jsonify({"weight": [], "bodyFat": []})
+
+    try:
+        conn = get_peptidetrack_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT date, weight_lbs, body_fat_pct FROM checkins "
+                    "WHERE patient_id=%s AND (weight_lbs IS NOT NULL OR body_fat_pct IS NOT NULL) "
+                    "ORDER BY date ASC LIMIT 90",
+                    (patient_id,)
+                )
+                rows = cur.fetchall()
+        finally:
+            conn.close()
+
+        weight = [{"date": str(r["date"]), "value": r["weight_lbs"]} for r in rows if r["weight_lbs"] is not None]
+        bodyfat = [{"date": str(r["date"]), "value": r["body_fat_pct"]} for r in rows if r["body_fat_pct"] is not None]
+        return jsonify({"weight": weight, "bodyFat": bodyfat})
+    except Exception as e:
+        return jsonify({"error": str(e), "weight": [], "bodyFat": []}), 500
 
 # ── DATABASE ──────────────────────────────────────────────────────────────────
 def get_db():
