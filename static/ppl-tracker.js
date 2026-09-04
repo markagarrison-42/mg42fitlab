@@ -342,6 +342,104 @@ function getWeeklyVolume(allLogs,refDate,customBpOverride){
 const MIN_WORKING_REPS=5;
 const TARGET_VOLUME={Chest:[20,24],Back:[22,26],Shoulders:[20,24],Biceps:[15,19],Triceps:[15,19],Quads:[16,20],Hamstrings:[14,18],Glutes:[14,18],Calves:[15,19],Core:null,Traps:[6,10],Other:null};
 
+// Preset volume goal templates. TARGET_VOLUME above remains the default/fallback
+// ("Balanced Hypertrophy"). A person can pick a preset as a starting point, then
+// hand-edit any individual group afterward - the override lives in their own
+// profile, never in this shared constant.
+const VOLUME_PRESETS={
+  balanced:{label:'Balanced Hypertrophy',goals:{Chest:[20,24],Back:[22,26],Shoulders:[20,24],Biceps:[15,19],Triceps:[15,19],Quads:[16,20],Hamstrings:[14,18],Glutes:[14,18],Calves:[15,19],Traps:[6,10],Core:null}},
+  upper:{label:'Upper Body Focus',goals:{Chest:[22,28],Back:[24,30],Shoulders:[22,28],Biceps:[17,22],Triceps:[17,22],Quads:[10,14],Hamstrings:[8,12],Glutes:[8,12],Calves:[10,14],Traps:[8,12],Core:null}},
+  lower:{label:'Lower Body Focus',goals:{Chest:[12,16],Back:[14,18],Shoulders:[12,16],Biceps:[10,14],Triceps:[10,14],Quads:[20,26],Hamstrings:[18,22],Glutes:[18,22],Calves:[18,22],Traps:[6,10],Core:null}},
+  glutes:{label:'Glute Focus',goals:{Chest:[10,14],Back:[14,18],Shoulders:[10,14],Biceps:[8,12],Triceps:[8,12],Quads:[14,18],Hamstrings:[16,20],Glutes:[20,26],Calves:[12,16],Traps:[6,10],Core:null}}
+};
+
+// Effective target map for a person: their own custom goals if set, else a
+// chosen preset's goals, else the shared default. Always includes Other:null
+// since that group is never user-configurable (it's the unassigned catch-all).
+function getEffectiveTargets(profile){
+  var base=(profile&&profile.volumeGoals)
+    ? profile.volumeGoals
+    : (profile&&profile.volumePreset&&VOLUME_PRESETS[profile.volumePreset])
+      ? VOLUME_PRESETS[profile.volumePreset].goals
+      : TARGET_VOLUME;
+  return Object.assign({},base,{Other:null});
+}
+
+// ── VOLUME GOALS EDITOR ─────────────────────────────────────────────────────
+function VolumeGoalsEditor({profile,onSaveProfile}){
+  const BP_LIST=['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes','Calves','Traps'];
+  const current=getEffectiveTargets(profile);
+  const[draft,setDraft]=useState(function(){
+    var d={};
+    BP_LIST.forEach(function(bp){d[bp]=current[bp]?[current[bp][0],current[bp][1]]:[0,0];});
+    return d;
+  });
+  const[dirty,setDirty]=useState(false);
+  const activePreset=profile&&profile.volumePreset;
+  const hasCustom=!!(profile&&profile.volumeGoals);
+
+  function applyPreset(key){
+    var goals=VOLUME_PRESETS[key].goals;
+    var d={};
+    BP_LIST.forEach(function(bp){d[bp]=goals[bp]?[goals[bp][0],goals[bp][1]]:[0,0];});
+    setDraft(d);
+    setDirty(true);
+    onSaveProfile(Object.assign({},profile||{},{volumePreset:key,volumeGoals:null}));
+    setDirty(false);
+  }
+
+  function updateVal(bp,idx,val){
+    var n=parseInt(val)||0;
+    setDraft(function(prev){
+      var next={...prev};
+      next[bp]=[...prev[bp]];
+      next[bp][idx]=n;
+      return next;
+    });
+    setDirty(true);
+  }
+
+  function saveDraft(){
+    var goals={};
+    BP_LIST.forEach(function(bp){
+      var lo=draft[bp][0],hi=draft[bp][1];
+      goals[bp]=(lo>0||hi>0)?[Math.min(lo,hi),Math.max(lo,hi)]:null;
+    });
+    onSaveProfile(Object.assign({},profile||{},{volumeGoals:goals}));
+    setDirty(false);
+  }
+
+  return React.createElement('div',{style:{background:T.bg2,borderRadius:12,padding:16,marginBottom:12,border:'1px solid '+T.border}},
+    React.createElement('div',{style:{fontSize:14,fontWeight:700,color:T.text,marginBottom:4}},'Volume Goals'),
+    React.createElement('div',{style:{fontSize:12,color:T.dim,marginBottom:12}},'Weekly working-set targets per muscle group. Pick a starting point, then adjust any group.'),
+    React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}},
+      Object.keys(VOLUME_PRESETS).map(function(key){
+        var on=activePreset===key&&!hasCustom;
+        return React.createElement('button',{
+          key:key,
+          onClick:function(){applyPreset(key);},
+          style:{padding:'9px 12px',borderRadius:9,border:'1px solid '+(on?'rgba(124,58,237,0.5)':T.border2),background:on?'rgba(124,58,237,0.2)':'rgba(255,255,255,0.03)',color:on?'#a78bfa':T.sub,fontSize:12,fontWeight:on?700:400,cursor:'pointer',WebkitTapHighlightColor:'transparent',minHeight:44}
+        },VOLUME_PRESETS[key].label);
+      })
+    ),
+    React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:8,marginBottom:12}},
+      BP_LIST.map(function(bp){
+        return React.createElement('div',{key:bp,style:{display:'flex',alignItems:'center',gap:8}},
+          React.createElement('div',{style:{width:78,fontSize:13,color:T.sub,flexShrink:0}},bp),
+          React.createElement('input',{type:'number',inputMode:'numeric',value:draft[bp][0]||'',onChange:function(e){updateVal(bp,0,e.target.value);},style:{width:52,padding:'8px 6px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:7,color:T.text,fontSize:13,fontFamily:T.mono,textAlign:'center'}}),
+          React.createElement('div',{style:{color:T.dim,fontSize:12}},'\u2013'),
+          React.createElement('input',{type:'number',inputMode:'numeric',value:draft[bp][1]||'',onChange:function(e){updateVal(bp,1,e.target.value);},style:{width:52,padding:'8px 6px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:7,color:T.text,fontSize:13,fontFamily:T.mono,textAlign:'center'}}),
+          React.createElement('div',{style:{fontSize:11,color:T.dim}},'sets/wk')
+        );
+      })
+    ),
+    dirty&&React.createElement('button',{
+      onClick:saveDraft,
+      style:{width:'100%',padding:12,borderRadius:9,border:'none',background:GRAD.button,color:'#fff',fontWeight:700,fontSize:14,cursor:'pointer',WebkitTapHighlightColor:'transparent',minHeight:44}
+    },'Save Volume Goals')
+  );
+}
+
 // Sum planned sets per muscle group for scheduled days from tomorrow through
 // today+offset. Used to project where weekly volume will land if the plan runs.
 function getPlannedVolume(workouts,schedule,customBp,offset){
@@ -379,7 +477,7 @@ function getPlannedVolume(workouts,schedule,customBp,offset){
   });
   return{totals:out,byExercise:flatByExercise};
 }
-function WeeklyVolumeCard({allLogs,customBp,setCustomBp,workouts,schedule,projectOffset}){
+function WeeklyVolumeCard({allLogs,customBp,setCustomBp,workouts,schedule,projectOffset,profile}){
   const[collapsed,setCollapsed]=useState(false);
   const[expandedBp,setExpandedBp]=useState(null);
   const[editingEx,setEditingEx]=useState(null);
@@ -397,7 +495,8 @@ function WeeklyVolumeCard({allLogs,customBp,setCustomBp,workouts,schedule,projec
   var byBodyPart=_vd.byBodyPart;
   var byExercise=_vd.byExercise;
   const bodyPartOrder=['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Calves','Glutes','Traps','Core','Other'];
-  const entries=bodyPartOrder.filter(function(bp){return byBodyPart[bp]||TARGET_VOLUME.hasOwnProperty(bp);});
+  var EFFECTIVE_TARGETS=getEffectiveTargets(profile);
+  const entries=bodyPartOrder.filter(function(bp){return byBodyPart[bp]||EFFECTIVE_TARGETS.hasOwnProperty(bp);});
   const{start,end}=getWeekRange(refDate);
   const endDisplay=new Date(end.getTime()-1);
   const isCurrentWeek=weekOffset===0;
@@ -454,7 +553,7 @@ function WeeklyVolumeCard({allLogs,customBp,setCustomBp,workouts,schedule,projec
         var count=byBodyPart[bp]||0;
         var plan=planned[bp]||0;
         var proj=count+plan;
-        var target=TARGET_VOLUME[bp];
+        var target=EFFECTIVE_TARGETS[bp];
         var color=statusColor(proj,target);
         var pct=target?Math.min(100,Math.round((count/target[1])*100)):0;
         var projPct=target?Math.min(100-pct,Math.round((plan/target[1])*100)):0;
@@ -1919,7 +2018,7 @@ function ExerciseDatabase({workouts,restDefaults,onSaveRestDefaults,onSaveExerci
 // Compares weekly volume against targets, subtracts what remaining scheduled
 // sessions will already cover, and suggests exercises already in your library.
 // Only surfaces gaps the current plan will not close on its own.
-function getVolumeSuggestions(allLogs,workouts,schedule,customBp){
+function getVolumeSuggestions(allLogs,workouts,schedule,customBp,profile){
   var vd=getWeeklyVolume(allLogs,new Date(),customBp);
   var byBodyPart=vd.byBodyPart;
   var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -1966,8 +2065,9 @@ function getVolumeSuggestions(allLogs,workouts,schedule,customBp){
   });
 
   var gaps=[];
-  Object.keys(TARGET_VOLUME).forEach(function(bp){
-    var target=TARGET_VOLUME[bp];
+  var EFFECTIVE_TARGETS=getEffectiveTargets(profile);
+  Object.keys(EFFECTIVE_TARGETS).forEach(function(bp){
+    var target=EFFECTIVE_TARGETS[bp];
     if(!target)return;
     var lo=target[0];
     var done=byBodyPart[bp]||0;
@@ -2766,7 +2866,7 @@ function VolumeGapCard({allLogs,workouts,schedule,customBp,profile,onSaveProfile
   var dismissed=(profile&&profile.gapDismissals&&profile.gapDismissals.week===weekKey)
     ? (profile.gapDismissals.groups||[]) : [];
 
-  var sug=getVolumeSuggestions(allLogs,workouts,schedule,customBp);
+  var sug=getVolumeSuggestions(allLogs,workouts,schedule,customBp,profile);
   if(!sug)return null;
 
   var visible=sug.gaps.filter(function(g){return dismissed.indexOf(g.bodyPart)<0;});
@@ -3018,7 +3118,7 @@ function DashboardTab({allLogs,workouts,schedule,restDefaults,customBp,setCustom
     React.createElement(VolumeGapCard,{allLogs,workouts,schedule,customBp,profile,onSaveProfile}),
 
     // Weekly volume
-    React.createElement(WeeklyVolumeCard,{allLogs,customBp,setCustomBp,workouts,schedule,projectOffset:dayOffset}),
+    React.createElement(WeeklyVolumeCard,{allLogs,customBp,setCustomBp,workouts,schedule,projectOffset:dayOffset,profile}),
 
 
     // Progressive overload
@@ -3538,6 +3638,9 @@ function PPLTracker(){
         React.createElement('button',{onClick:function(){setTab('dashboard');},style:{width:44,height:44,borderRadius:9,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:18,cursor:'pointer',flexShrink:0,WebkitTapHighlightColor:'transparent'}},'<'),
         React.createElement('div',{style:{fontSize:20,fontWeight:700,color:T.text}},'Settings')
       ),
+
+      // Volume goals section
+      React.createElement(VolumeGoalsEditor,{profile,onSaveProfile:setProfile}),
 
       // Import section
       React.createElement('div',{style:{background:T.bg2,borderRadius:12,padding:16,marginBottom:12,border:'1px solid '+T.border}},
