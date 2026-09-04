@@ -2353,9 +2353,9 @@ async function fetchFrequentFoods(daysBack){
 
 // ── MACRO TRACKER ──────────────────────────────────────────────────────────────
 function MacroCard({profile,onSaveProfile}){
-  const[collapsed,setCollapsed]=useState(false);
   const[dayOffset,setDayOffset]=useState(0);
   const[entries,setEntries]=useState([]);
+  const[entriesCollapsed,setEntriesCollapsed]=useState(true);
   const[loading,setLoading]=useState(true);
   const[showAdd,setShowAdd]=useState(false);
   const[mealText,setMealText]=useState('');
@@ -2611,19 +2611,18 @@ function MacroCard({profile,onSaveProfile}){
   ];
 
   return React.createElement('div',{style:{margin:'0 16px 12px',background:T.bg2,borderRadius:14,border:'1px solid '+T.border,overflow:'hidden'}},
-    React.createElement('div',{onClick:function(){setCollapsed(function(v){return !v;});},style:{padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},
+    React.createElement('div',{style:{padding:'12px 16px',display:'flex',alignItems:'center',gap:10}},
       React.createElement('div',{style:{fontSize:16}},'\uD83E\uDD69'),
       React.createElement('div',{style:{flex:1}},
         React.createElement('div',{style:{fontSize:16,fontWeight:700,color:T.text}},'Macros'+(isToday?'':' \u2014 '+dateLabel)),
         React.createElement('div',{style:{fontSize:12,color:T.dim,marginTop:2}},tot.cal+' / '+calTarget+' cal')
       ),
       React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6}},
-        React.createElement('button',{onClick:function(e){e.stopPropagation();setDayOffset(function(o){return o-1;});if(collapsed)setCollapsed(false);},style:{width:40,height:40,borderRadius:7,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:16,cursor:'pointer',WebkitTapHighlightColor:'transparent',lineHeight:1}},'\u2039'),
-        !isToday&&React.createElement('button',{onClick:function(e){e.stopPropagation();setDayOffset(function(o){return Math.min(o+1,0);});},style:{width:40,height:40,borderRadius:7,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:16,cursor:'pointer',WebkitTapHighlightColor:'transparent',lineHeight:1}},'\u203a'),
-        React.createElement('div',{style:{fontSize:13,color:T.dim,marginLeft:2}},collapsed?'\u2304':'\u2303')
+        React.createElement('button',{onClick:function(e){e.stopPropagation();setDayOffset(function(o){return o-1;});},style:{width:40,height:40,borderRadius:7,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:16,cursor:'pointer',WebkitTapHighlightColor:'transparent',lineHeight:1}},'\u2039'),
+        !isToday&&React.createElement('button',{onClick:function(e){e.stopPropagation();setDayOffset(function(o){return Math.min(o+1,0);});},style:{width:40,height:40,borderRadius:7,border:'1px solid '+T.border2,background:'transparent',color:T.sub,fontSize:16,cursor:'pointer',WebkitTapHighlightColor:'transparent',lineHeight:1}},'\u203a')
       )
     ),
-    !collapsed&&React.createElement('div',{style:{padding:'0 16px 14px'}},
+    React.createElement('div',{style:{padding:'0 16px 14px'}},
       React.createElement('div',{style:{marginBottom:12}},
         React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:4}},
           React.createElement('div',{style:{fontSize:14,color:T.text,fontWeight:700}},'Calories'),
@@ -2646,8 +2645,15 @@ function MacroCard({profile,onSaveProfile}){
         );
       }),
       loading&&React.createElement('div',{style:{fontSize:12,color:T.dim,textAlign:'center',padding:'8px 0'}},'Loading...'),
-      !loading&&entries.length===0&&React.createElement('div',{style:{fontSize:12,color:T.dim,textAlign:'center',padding:'10px 0'}},'No meals logged'),
-      !loading&&entries.map(function(e){
+      !loading&&entries.length>0&&React.createElement('button',{
+        onClick:function(){setEntriesCollapsed(function(v){return !v;});},
+        style:{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 14px',marginBottom:entriesCollapsed?0:8,borderRadius:10,border:'1px solid '+T.border2,background:'rgba(255,255,255,0.03)',cursor:'pointer',WebkitTapHighlightColor:'transparent'}
+      },
+        React.createElement('div',{style:{fontSize:13,fontWeight:700,color:T.text}},entries.length+' meal'+(entries.length===1?'':'s')+' logged'),
+        React.createElement('div',{style:{fontSize:15,color:'#a78bfa',fontWeight:700}},entriesCollapsed?'\u25be Show':'\u25b4 Hide')
+      ),
+      !loading&&entriesCollapsed&&entries.length===0&&React.createElement('div',{style:{fontSize:12,color:T.dim,textAlign:'center',padding:'10px 0'}},'No meals logged'),
+      !loading&&!entriesCollapsed&&entries.map(function(e){
         if(editTs===e.ts){
           return React.createElement('div',{key:e.ts,style:{padding:'10px 0',borderTop:'1px solid '+T.border}},
             React.createElement('input',{type:'text',value:eLabel,onChange:function(ev){setELabel(ev.target.value);},placeholder:'Meal name',style:{width:'100%',padding:'9px 11px',background:T.bg3,border:'1px solid '+T.border2,borderRadius:8,color:T.text,fontSize:13,fontFamily:T.sans,marginBottom:7}}),
@@ -2803,15 +2809,14 @@ function HealthMetricsCard(){
   var trend30=(recent30.length>1)?(recent30[recent30.length-1].value-recent30[0].value):null;
 
   return React.createElement('div',{style:{margin:'0 16px 12px',background:T.bg2,borderRadius:14,border:'1px solid '+T.border,overflow:'hidden'}},
-    React.createElement('div',{onClick:function(){setCollapsed(function(v){return !v;});},style:{padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer',WebkitTapHighlightColor:'transparent'}},
+    React.createElement('div',{style:{padding:'12px 16px',display:'flex',alignItems:'center',gap:10}},
       React.createElement('div',{style:{fontSize:16}},'\uD83D\uDCCA'),
       React.createElement('div',{style:{flex:1}},
         React.createElement('div',{style:{fontSize:16,fontWeight:700,color:T.text}},'Health Metrics'),
         React.createElement('div',{style:{fontSize:12,color:T.dim,marginTop:2}},'Synced from PeptideTrack')
-      ),
-      React.createElement('div',{style:{fontSize:13,color:T.dim}},collapsed?'\u2304':'\u2303')
+      )
     ),
-    !collapsed&&React.createElement('div',{style:{padding:'0 16px 14px'}},
+    React.createElement('div',{style:{padding:'0 16px 14px'}},
       React.createElement('div',{style:{display:'flex',gap:10,marginBottom:14}},
         lastW!==null&&React.createElement('div',{style:{flex:1,padding:'10px 12px',background:T.bg3,borderRadius:9}},
           React.createElement('div',{style:{fontSize:10,color:T.dim,marginBottom:2}},'WEIGHT'),
